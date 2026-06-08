@@ -3,7 +3,11 @@
 -- Go to: https://supabase.com/dashboard/project/nztysylevyzllwsdecny/sql/new
 -- ============================================================
 
--- 1. CREATE STORAGE BUCKET for resumes
+-- 1. ALTER TABLE to add missing columns if they don't exist
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS notes text DEFAULT NULL;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS favorite boolean DEFAULT false;
+
+-- 2. CREATE STORAGE BUCKET for resumes
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'resumes',
@@ -20,7 +24,7 @@ values (
 )
 on conflict (id) do nothing;
 
--- 2. STORAGE POLICIES — allow public uploads and reads
+-- 3. STORAGE POLICIES — allow public uploads and reads
 create policy "Allow public resume uploads"
   on storage.objects for insert
   with check (bucket_id = 'resumes');
@@ -29,7 +33,7 @@ create policy "Allow public resume reads"
   on storage.objects for select
   using (bucket_id = 'resumes');
 
--- 3. CREATE insert_candidate() RPC with SECURITY DEFINER
+-- 4. CREATE insert_candidate() RPC with SECURITY DEFINER
 --    This bypasses RLS so the anon key can insert new candidate profiles
 create or replace function public.insert_candidate(
   p_name            text    default null,
@@ -46,6 +50,7 @@ create or replace function public.insert_candidate(
   p_resume_url      text    default null,
   p_resume_file     text    default null,
   p_resume_text     text    default null,
+  p_notes           text    default null,
   p_source          text    default 'resume_upload'
 )
 returns json
@@ -75,6 +80,7 @@ begin
       resume_url         = coalesce(nullif(p_resume_url, ''), resume_url),
       resume_file_name   = coalesce(nullif(p_resume_file, ''), resume_file_name),
       resume_text        = coalesce(nullif(p_resume_text, ''), resume_text),
+      notes              = coalesce(nullif(p_notes, ''),   notes),
       source             = p_source,
       profile_status     = 'Active',
       profile_completion = greatest(coalesce(profile_completion, 0),
@@ -94,7 +100,7 @@ begin
     insert into candidates (
       "Candidate Name", "Email", "Contact No", "LinkedIn",
       "Title", "Skills", "VISA", "Current Location",
-      resume_url, resume_file_name, resume_text,
+      resume_url, resume_file_name, resume_text, notes,
       source, profile_status, profile_completion,
       candidate_uuid, created_at, last_updated
     ) values (
@@ -109,6 +115,7 @@ begin
       nullif(p_resume_url, ''),
       nullif(p_resume_file, ''),
       nullif(p_resume_text, ''),
+      nullif(p_notes, ''),
       p_source,
       'Active',
       (case when p_name     is not null and p_name     != '' then 15 else 0 end) +

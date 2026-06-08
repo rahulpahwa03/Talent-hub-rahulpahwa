@@ -27,6 +27,19 @@ export async function submitCandidateProfile({ form, file, resumeText }) {
     ? form.skills.join(', ')
     : (form.skills || '');
 
+  let notesStr = form.notes || '';
+  if (notesStr && !notesStr.trim().startsWith('[')) {
+    notesStr = JSON.stringify([{
+      id: Date.now(),
+      author: "Parsing Portal",
+      initials: "PP",
+      color: "#2563EB",
+      date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      type: "text",
+      text: notesStr.trim()
+    }]);
+  }
+
   const { data, error } = await supabase.rpc('insert_candidate', {
     p_name:        form.name        || '',
     p_email:       form.email       || '',
@@ -42,6 +55,7 @@ export async function submitCandidateProfile({ form, file, resumeText }) {
     p_resume_url:  resumeUrl,
     p_resume_file: resumeFile,
     p_resume_text: (resumeText || '').slice(0, 50000), // cap at 50k chars
+    p_notes:       notesStr || null,
     p_source:      'resume_upload',
   });
 

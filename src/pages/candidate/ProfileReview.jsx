@@ -710,7 +710,7 @@ export default function ProfileReview() {
 
               <div
                 style={{
-                  height: 500,
+                  height: 700,
                   border: "1px solid var(--border)",
                   borderRadius: "var(--radius-lg)",
                   overflow: "hidden",

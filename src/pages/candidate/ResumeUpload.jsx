@@ -417,6 +417,7 @@ function StepReview({ parsedData, onSubmit }) {
     skills: Array.isArray(parsedData.skills)
       ? parsedData.skills
       : (parsedData.skills || "").split(",").map(s => s.trim()).filter(Boolean),
+    notes: parsedData.notes || "",
   });
 
   const [skillInput, setSkillInput] = useState("");
@@ -656,6 +657,22 @@ function StepReview({ parsedData, onSubmit }) {
                 onChange={set("summary")}
                 placeholder="Brief summary of your professional background..."
                 style={{ resize: "vertical", minHeight: 90 }}
+              />
+            </div>
+
+            {/* Editable Notes field */}
+            <div className="input-group" style={{ margin: 0 }}>
+              <label className="input-label" style={{ display: "flex", alignItems: "center" }}>
+                Notes / Additional Comments
+                <AiBadge />
+              </label>
+              <textarea
+                rows={3}
+                className="input"
+                value={form.notes || ""}
+                onChange={set("notes")}
+                placeholder="Add notes, recruiter comments, or specific search keywords..."
+                style={{ resize: "vertical", minHeight: 70 }}
               />
             </div>
           </div>

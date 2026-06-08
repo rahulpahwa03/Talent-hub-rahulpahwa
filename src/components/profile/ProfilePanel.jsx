@@ -650,7 +650,7 @@ export default function ProfilePanel({ candidate, onFavoriteToggle, onCandidateU
                     borderRadius: "var(--radius-lg)",
                     overflow: "hidden",
                     background: "#F8FAFC",
-                    height: 600,
+                    height: 780,
                     boxShadow: "var(--shadow-sm)",
                   }}
                 >
