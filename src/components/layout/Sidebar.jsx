@@ -18,20 +18,6 @@ const NAV = [
       { label: 'Candidates', icon: Users, to: '/recruiter/candidates' },
     ],
   },
-  {
-    section: 'Tools',
-    items: [
-      { label: 'Analytics', icon: BarChart2, to: '/recruiter/analytics' },
-      { label: 'AI Search', icon: Sparkles, to: '/recruiter/candidates?ai=true', end: false },
-    ],
-  },
-  {
-    section: 'Settings',
-    items: [
-      { label: 'Settings', icon: Settings, to: '/recruiter/settings', disabled: true },
-      { label: 'Help', icon: HelpCircle, to: '/recruiter/help', disabled: true },
-    ],
-  },
 ];
 
 export default function Sidebar() {
