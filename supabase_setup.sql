@@ -35,6 +35,9 @@ create policy "Allow public resume reads"
 
 -- 4. CREATE insert_candidate() RPC with SECURITY DEFINER
 --    This bypasses RLS so the anon key can insert new candidate profiles
+DROP FUNCTION IF EXISTS public.insert_candidate(text, text, text, text, text, text, text, text, text, text, text, text, text, text, text);
+DROP FUNCTION IF EXISTS public.insert_candidate(text, text, text, text, text, text, text, text, text, text, text, text, text, text, text, text);
+
 create or replace function public.insert_candidate(
   p_name            text    default null,
   p_email           text    default null,
