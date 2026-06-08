@@ -1867,6 +1867,11 @@ export default function CandidateDatabase() {
       await addLog(`[Extract] Profiles parsed: "${cand.name}" (${cand.title} at ${cand.company})`, 600);
       await addLog(`[Database] Checking if candidate already exists in database...`, 500);
       
+      if (!supabase) {
+        await addLog(`[Database] Client not initialized. Simulating mock local storage for ${cand.name}...`, 800);
+        continue;
+      }
+
       try {
         // Insert candidate using RPC (avoids duplicate conflicts by email)
         const { data, error } = await supabase.rpc('insert_candidate', {
@@ -1906,6 +1911,10 @@ export default function CandidateDatabase() {
 
   // Helper fetch function to reuse in useEffect and trigger
   const loadCandidates = async () => {
+    if (!supabase) {
+      console.warn('Supabase is not configured. Falling back to static mock data.');
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('candidates')
