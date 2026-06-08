@@ -14,7 +14,10 @@ import {
   Download,
   X,
   ChevronRight,
+  User,
+  Plus,
 } from "lucide-react";
+import { supabase } from "../../lib/supabase";
 
 /* ─── Avatar helpers ─────────────────────────────────────── */
 const AVATAR_COLORS = ["#2563EB", "#7C3AED", "#D97706", "#16A34A", "#E11D48"];
@@ -33,7 +36,7 @@ function getInitials(name = "") {
 }
 
 function getEmbeddableResumeUrl(url) {
-  if (!url) return '';
+  if (!url) return "";
   const openMatch = url.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9\-_]+)/);
   if (openMatch) {
     return `https://drive.google.com/file/d/${openMatch[1]}/preview`;
@@ -42,19 +45,31 @@ function getEmbeddableResumeUrl(url) {
   if (fileMatch) {
     return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
   }
+
+  // Microsoft Office Online viewer for doc/docx
+  const lowercaseUrl = url.toLowerCase();
+  if (
+    lowercaseUrl.endsWith(".docx") ||
+    lowercaseUrl.endsWith(".doc") ||
+    lowercaseUrl.includes(".docx?") ||
+    lowercaseUrl.includes(".doc?")
+  ) {
+    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+  }
+
   return url;
 }
 
 /* ─── Tabs config ────────────────────────────────────────── */
 const TABS = [
   { id: "overview", label: "Overview" },
-  { id: "skills",   label: "Skills"   },
-  { id: "resume",   label: "Resume"   },
-  { id: "notes",    label: "Notes"    },
+  { id: "skills", label: "Skills" },
+  { id: "resume", label: "Resume" },
+  { id: "notes", label: "Notes" },
   { id: "activity", label: "Activity" },
 ];
 
-/* ─── Mock notes ─────────────────────────────────────────── */
+/* ─── Mock notes (fallback) ──────────────────────────────── */
 const MOCK_NOTES = [
   {
     id: 1,
@@ -62,6 +77,7 @@ const MOCK_NOTES = [
     initials: "SC",
     color: "#2563EB",
     date: "Jun 5, 2026",
+    type: "text",
     text: "Strong candidate — excellent communication skills. Recommended for second round. Has deep React expertise and led a team of 6.",
   },
   {
@@ -70,25 +86,18 @@ const MOCK_NOTES = [
     initials: "JO",
     color: "#16A34A",
     date: "Jun 3, 2026",
+    type: "text",
     text: "Technical screen went well. Solid problem-solving, clean code. Minor concern on system design but manageable.",
-  },
-  {
-    id: 3,
-    author: "Priya Nair",
-    initials: "PN",
-    color: "#D97706",
-    date: "May 29, 2026",
-    text: "Initial screening call completed. Candidate is actively looking, available in 2 weeks notice. Salary expectation is within range.",
   },
 ];
 
 /* ─── Mock activity timeline ─────────────────────────────── */
 const MOCK_ACTIVITY = [
-  { id: 1, label: "Profile created",       time: "Jun 1, 2026 · 9:12 AM",  active: true  },
-  { id: 2, label: "Resume uploaded",       time: "Jun 1, 2026 · 9:15 AM",  active: true  },
-  { id: 3, label: "Viewed by recruiter",   time: "Jun 3, 2026 · 2:48 PM",  active: false },
-  { id: 4, label: "Note added",            time: "Jun 3, 2026 · 3:01 PM",  active: false },
-  { id: 5, label: "Favorited",             time: "Jun 5, 2026 · 11:30 AM", active: false },
+  { id: 1, label: "Profile created", time: "Jun 1, 2026 · 9:12 AM", active: true },
+  { id: 2, label: "Resume uploaded", time: "Jun 1, 2026 · 9:15 AM", active: true },
+  { id: 3, label: "Viewed by recruiter", time: "Jun 3, 2026 · 2:48 PM", active: false },
+  { id: 4, label: "Note added", time: "Jun 3, 2026 · 3:01 PM", active: false },
+  { id: 5, label: "Favorited", time: "Jun 5, 2026 · 11:30 AM", active: false },
 ];
 
 /* ─── Sub-components ─────────────────────────────────────── */
@@ -122,23 +131,65 @@ function Spinner() {
 /* ════════════════════════════════════════════════════════════
    ProfilePanel
    ════════════════════════════════════════════════════════════ */
-export default function ProfilePanel({ candidate, onFavoriteToggle }) {
-  const [activeTab,     setActiveTab]     = useState("overview");
+export default function ProfilePanel({ candidate, onFavoriteToggle, onCandidateUpdate }) {
+  const [activeTab, setActiveTab] = useState("overview");
   const [localFavorite, setLocalFavorite] = useState(false);
-  const [summary,       setSummary]       = useState("");
+  
+  const [summary, setSummary] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
-  const [noteText,      setNoteText]      = useState("");
+  
+  // Notes States
+  const [noteText, setNoteText] = useState("");
   const [recruiterName, setRecruiterName] = useState("");
-  const [savedNotes,    setSavedNotes]    = useState(MOCK_NOTES);
+  const [savedNotes, setSavedNotes] = useState([]);
+  const [noteType, setNoteType] = useState("text"); // "text" or "table"
+  const [tableInput, setTableInput] = useState("");
+  const [tableRows, setTableRows] = useState(null);
 
   const favorited = onFavoriteToggle ? !!candidate?.favorite : localFavorite;
 
-  /* Reset state when candidate changes */
+  /* Reset state and load notes from Supabase when candidate changes */
   useEffect(() => {
     setActiveTab("overview");
     setSummary("");
     setSummaryLoading(false);
     setLocalFavorite(!!candidate?.favorite);
+
+    // Reset notes inputs
+    setNoteText("");
+    setTableInput("");
+    setTableRows(null);
+
+    if (candidate) {
+      if (candidate.notes) {
+        try {
+          const parsed = JSON.parse(candidate.notes);
+          if (Array.isArray(parsed)) {
+            setSavedNotes(parsed);
+          } else {
+            setSavedNotes([]);
+          }
+        } catch (e) {
+          // If notes are saved as plain text, display as a single note
+          setSavedNotes([
+            {
+              id: 1,
+              author: "Recruiter",
+              initials: "R",
+              color: "#7C3AED",
+              date: "Imported",
+              type: "text",
+              text: candidate.notes,
+            },
+          ]);
+        }
+      } else {
+        // Fallback to mock notes for candidates without saved database notes
+        setSavedNotes(MOCK_NOTES);
+      }
+    } else {
+      setSavedNotes([]);
+    }
   }, [candidate]);
 
   /* ── Empty state ─────────────────────────────── */
@@ -148,9 +199,7 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
         <div className="empty-state-icon">
           <FileText size={24} style={{ color: "var(--text-muted)" }} />
         </div>
-        <h4 style={{ color: "var(--text-secondary)", marginTop: 4 }}>
-          Select a candidate
-        </h4>
+        <h4 style={{ color: "var(--text-secondary)", marginTop: 4 }}>Select a candidate</h4>
         <p style={{ fontSize: 13, maxWidth: 240, lineHeight: 1.6 }}>
           Click any candidate to view their full profile
         </p>
@@ -159,20 +208,23 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
   }
 
   /* ── Derived data ────────────────────────────── */
-  const name      = candidate["Candidate Name"] || "Unknown";
-  const title     = candidate["Title"] || "";
-  const location  = candidate["Current Location"] || "";
-  const visa      = candidate["VISA"] || "";
-  const email     = candidate["Email"]?.trim() || "";
-  const phone     = candidate["Contact No"]?.trim() || "";
-  const linkedin  = candidate["LinkedIn"]?.trim() || "";
+  const name = candidate["Candidate Name"] || "Unknown";
+  const title = candidate["Title"] || "";
+  const location = candidate["Current Location"] || "";
+  const visa = candidate["VISA"] || "";
+  const email = candidate["Email"]?.trim() || "";
+  const phone = candidate["Contact No"]?.trim() || "";
+  const linkedin = candidate["LinkedIn"]?.trim() || "";
   const resumeUrl = candidate["resume_url"]?.trim() || "";
 
   const avatarColor = getAvatarColor(name);
-  const initials    = getInitials(name);
+  const initials = getInitials(name);
 
   const allSkills = candidate["Skills"]
-    ? candidate["Skills"].split(/[|,]/).map((s) => s.trim()).filter(Boolean)
+    ? candidate["Skills"]
+        .split(/[|,]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [];
 
   const linkedinUrl = linkedin
@@ -199,20 +251,99 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
     }, 1500);
   };
 
-  const handleSaveNote = () => {
-    if (!noteText.trim()) return;
-    const newNote = {
-      id: Date.now(),
-      author: recruiterName.trim() || "Recruiter",
-      initials: (recruiterName.trim() || "R").slice(0, 2).toUpperCase(),
-      color: "#7C3AED",
-      date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      text: noteText.trim(),
-    };
-    setSavedNotes((prev) => [newNote, ...prev]);
+  // Parses tab-separated spreadsheet data
+  const handleTableInputChange = (val) => {
+    setTableInput(val);
+    if (!val.trim()) {
+      setTableRows(null);
+      return;
+    }
+    const clean = val.replace(/\r\n/g, "\n");
+    const lines = clean.split("\n").filter((line) => line.trim().length > 0);
+    if (lines.length === 0) {
+      setTableRows(null);
+      return;
+    }
+
+    // Split columns by tabs (TSV from Excel/Sheets)
+    const parsed = lines.map((line) => line.split("\t").map((cell) => cell.trim()));
+    const validRows = parsed.filter((row) => row.some((cell) => cell.length > 0));
+
+    if (validRows.length > 0) {
+      setTableRows(validRows);
+    } else {
+      setTableRows(null);
+    }
+  };
+
+  const handleSaveNote = async () => {
+    let newNote = null;
+
+    if (noteType === "table") {
+      if (!tableRows || tableRows.length === 0) {
+        toast.error("Please paste spreadsheet columns first");
+        return;
+      }
+      newNote = {
+        id: Date.now(),
+        author: recruiterName.trim() || "Recruiter",
+        initials: (recruiterName.trim() || "R").slice(0, 2).toUpperCase(),
+        color: getAvatarColor(recruiterName.trim() || "Recruiter"),
+        date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        type: "table",
+        text: noteText.trim(),
+        tableData: {
+          headers: tableRows[0],
+          rows: tableRows.slice(1),
+        },
+      };
+    } else {
+      if (!noteText.trim()) return;
+      newNote = {
+        id: Date.now(),
+        author: recruiterName.trim() || "Recruiter",
+        initials: (recruiterName.trim() || "R").slice(0, 2).toUpperCase(),
+        color: getAvatarColor(recruiterName.trim() || "Recruiter"),
+        date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        type: "text",
+        text: noteText.trim(),
+      };
+    }
+
+    const updatedNotes = [newNote, ...savedNotes];
+    setSavedNotes(updatedNotes);
+
+    // Save to Supabase
+    if (candidate.id || candidate.candidate_uuid) {
+      const dbId = candidate.id || candidate.candidate_uuid;
+      const notesJson = JSON.stringify(updatedNotes);
+
+      try {
+        const { error } = await supabase
+          .from("candidates")
+          .update({ notes: notesJson })
+          .or(`id.eq.${dbId},candidate_uuid.eq.${dbId}`);
+
+        if (error) throw error;
+
+        toast.success("Note saved!");
+
+        // Update CandidateDatabase parent state so notes persist without reload
+        if (onCandidateUpdate) {
+          onCandidateUpdate({ ...candidate, notes: notesJson });
+        }
+      } catch (err) {
+        console.error("[ProfilePanel] notes save error:", err);
+        toast.error("Failed to save note to database.");
+      }
+    } else {
+      toast.success("Note saved locally (Demo mode)");
+    }
+
+    // Reset inputs
     setNoteText("");
-    setRecruiterName("");
-    toast.success("Note saved!");
+    setTableInput("");
+    setTableRows(null);
   };
 
   /* ── Render ──────────────────────────────────── */
@@ -233,12 +364,8 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
     >
       {/* ══ SECTION 1 — Header ═══════════════════ */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 18, marginBottom: 24 }}>
-
         {/* Large avatar */}
-        <div
-          className="avatar avatar-xl"
-          style={{ background: avatarColor, flexShrink: 0 }}
-        >
+        <div className="avatar avatar-xl" style={{ background: avatarColor, flexShrink: 0 }}>
           {initials}
         </div>
 
@@ -295,10 +422,7 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
 
             {/* View Resume Inline */}
             {resumeUrl && (
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setActiveTab("resume")}
-              >
+              <button className="btn btn-secondary btn-sm" onClick={() => setActiveTab("resume")}>
                 <FileText size={12} />
                 View Resume
               </button>
@@ -333,11 +457,7 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
             </motion.button>
 
             {/* Generate AI Summary */}
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={handleGenerateSummary}
-              disabled={summaryLoading}
-            >
+            <button className="btn btn-ghost btn-sm" onClick={handleGenerateSummary} disabled={summaryLoading}>
               <Sparkles size={12} />
               Generate AI Summary
             </button>
@@ -372,10 +492,10 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
             <div style={{ marginBottom: 24 }}>
               <div className="section-title">Contact Information</div>
               <div className="card-sm" style={{ padding: "4px 16px" }}>
-                <InfoRow icon={<Mail size={14} />}   label="Email"    value={email}    />
-                <InfoRow icon={<Phone size={14} />}  label="Phone"    value={phone}    />
+                <InfoRow icon={<Mail size={14} />} label="Email" value={email} />
+                <InfoRow icon={<Phone size={14} />} label="Phone" value={phone} />
                 <InfoRow icon={<MapPin size={14} />} label="Location" value={location} />
-                <InfoRow icon={<Shield size={14} />} label="Visa"     value={visa}     />
+                <InfoRow icon={<Shield size={14} />} label="Visa" value={visa} />
               </div>
             </div>
 
@@ -392,14 +512,7 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
                   padding: "16px 18px",
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    marginBottom: 10,
-                  }}
-                >
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
                   <Sparkles size={14} style={{ color: "#7C3AED" }} />
                   <span
                     style={{
@@ -419,9 +532,7 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
                     <span style={{ fontSize: 13, color: "#7C3AED" }}>Generating summary…</span>
                   </div>
                 ) : (
-                  <p style={{ fontSize: 13.5, color: "#4C1D95", lineHeight: 1.7, margin: 0 }}>
-                    {summary}
-                  </p>
+                  <p style={{ fontSize: 13.5, color: "#4C1D95", lineHeight: 1.7, margin: 0 }}>{summary}</p>
                 )}
               </motion.div>
             )}
@@ -463,8 +574,10 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
                 marginBottom: 14,
               }}
             >
-              <div className="section-title" style={{ marginBottom: 0 }}>Skills</div>
-              <span className="badge badge-gray">
+              <div className="section-title" style={{ marginBottom: 0 }}>
+                Skills
+              </div>
+              <span className="badge badge-gray font-mono">
                 {allSkills.length} skill{allSkills.length !== 1 ? "s" : ""}
               </span>
             </div>
@@ -499,22 +612,22 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 650 }}
+            style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 650 }}
           >
             {resumeUrl ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, height: "100%" }}>
                 {/* Header actions */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 500 }}>
                     Inline Document Viewer
                   </span>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8 }}>
                     <a
                       href={resumeUrl}
                       target="_blank"
                       rel="noreferrer"
                       className="btn btn-secondary btn-sm"
-                      style={{ textDecoration: "none", fontSize: 12, padding: '4px 10px' }}
+                      style={{ textDecoration: "none", fontSize: 12, padding: "4px 10px" }}
                     >
                       <ExternalLink size={11} /> Open in New Tab
                     </a>
@@ -522,28 +635,30 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
                       href={resumeUrl}
                       download
                       className="btn btn-secondary btn-sm"
-                      style={{ textDecoration: "none", fontSize: 12, padding: '4px 10px' }}
+                      style={{ textDecoration: "none", fontSize: 12, padding: "4px 10px" }}
                     >
                       <Download size={11} /> Download
                     </a>
                   </div>
                 </div>
-                
+
                 {/* Embedded Frame */}
-                <div style={{
-                  flex: 1,
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-lg)',
-                  overflow: 'hidden',
-                  background: '#F8FAFC',
-                  height: 600,
-                  boxShadow: 'var(--shadow-sm)',
-                }}>
+                <div
+                  style={{
+                    flex: 1,
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-lg)",
+                    overflow: "hidden",
+                    background: "#F8FAFC",
+                    height: 600,
+                    boxShadow: "var(--shadow-sm)",
+                  }}
+                >
                   <iframe
                     src={getEmbeddableResumeUrl(resumeUrl)}
                     width="100%"
                     height="100%"
-                    style={{ border: 'none' }}
+                    style={{ border: "none" }}
                     title="Candidate Resume Preview"
                     allow="autoplay"
                   />
@@ -551,18 +666,8 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
               </div>
             ) : (
               <div className="dropzone" style={{ padding: "48px 32px" }}>
-                <FileText
-                  size={36}
-                  style={{ color: "var(--text-muted)", margin: "0 auto 12px", display: "block" }}
-                />
-                <p
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 600,
-                    color: "var(--text-secondary)",
-                    margin: "0 0 6px",
-                  }}
-                >
+                <FileText size={36} style={{ color: "var(--text-muted)", margin: "0 auto 12px", display: "block" }} />
+                <p style={{ fontSize: 15, fontWeight: 600, color: "var(--text-secondary)", margin: "0 0 6px" }}>
                   No resume on file
                 </p>
                 <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 20px" }}>
@@ -586,6 +691,52 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
             <div className="card-sm" style={{ padding: 18, marginBottom: 24 }}>
               <div className="section-title">Add a Note</div>
 
+              {/* Note Type Selector Tabs */}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  marginBottom: 16,
+                  borderBottom: "1px solid var(--border-soft)",
+                  paddingBottom: 8,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setNoteType("text")}
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: "var(--radius-md)",
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    border: "none",
+                    background: noteType === "text" ? "var(--primary)" : "transparent",
+                    color: noteType === "text" ? "#FFF" : "var(--text-secondary)",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  ✍️ Text Note
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNoteType("table")}
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: "var(--radius-md)",
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    border: "none",
+                    background: noteType === "table" ? "var(--primary)" : "transparent",
+                    color: noteType === "table" ? "#FFF" : "var(--text-secondary)",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  📊 Paste Spreadsheet Table
+                </button>
+              </div>
+
               <div className="input-group" style={{ marginBottom: 10 }}>
                 <label className="input-label">Your name</label>
                 <input
@@ -597,22 +748,97 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
                 />
               </div>
 
-              <div className="input-group" style={{ marginBottom: 12 }}>
-                <label className="input-label">Note</label>
-                <textarea
-                  rows={6}
-                  className="input"
-                  placeholder="Add recruiter notes, interview feedback, follow-up actions…"
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  style={{ resize: "vertical", minHeight: 120 }}
-                />
-              </div>
+              {noteType === "text" ? (
+                <div className="input-group" style={{ marginBottom: 12 }}>
+                  <label className="input-label">Note</label>
+                  <textarea
+                    rows={5}
+                    className="input"
+                    placeholder="Add recruiter notes, interview feedback, follow-up actions…"
+                    value={noteText}
+                    onChange={(e) => setNoteText(e.target.value)}
+                    style={{ resize: "vertical", minHeight: 110 }}
+                  />
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 12 }}>
+                  <div className="input-group" style={{ margin: 0 }}>
+                    <label className="input-label">Spreadsheet Tabular Data</label>
+                    <textarea
+                      rows={5}
+                      className="input"
+                      placeholder="Copy cells from Excel or Google Sheets (tab-separated) and paste them here..."
+                      value={tableInput}
+                      onChange={(e) => handleTableInputChange(e.target.value)}
+                      style={{ resize: "vertical", minHeight: 90, fontFamily: "monospace", fontSize: 12 }}
+                    />
+                    <span className="input-hint">Spreadsheet data parsed automatically.</span>
+                  </div>
+
+                  <div className="input-group" style={{ margin: 0 }}>
+                    <label className="input-label">Description / Caption (Optional)</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="Add context for this table..."
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Live Table Preview */}
+                  {tableRows && tableRows.length > 0 && (
+                    <div style={{ marginTop: 4 }}>
+                      <div className="input-label" style={{ marginBottom: 6 }}>Live Preview ({tableRows.length} rows)</div>
+                      <div
+                        style={{
+                          overflowX: "auto",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-md)",
+                          maxHeight: 200,
+                        }}
+                      >
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
+                          <thead>
+                            <tr style={{ background: "var(--bg-muted)", borderBottom: "1px solid var(--border)" }}>
+                              {tableRows[0].map((h, i) => (
+                                <th
+                                  key={i}
+                                  style={{ padding: "6px 10px", fontWeight: 600, color: "var(--text-primary)" }}
+                                >
+                                  {h || `Col ${i + 1}`}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tableRows.slice(1).map((row, rowIndex) => (
+                              <tr
+                                key={rowIndex}
+                                style={{
+                                  borderBottom: "1px solid var(--border-soft)",
+                                  background: rowIndex % 2 === 1 ? "var(--bg-soft)" : "none",
+                                }}
+                              >
+                                {row.map((cell, cellIndex) => (
+                                  <td key={cellIndex} style={{ padding: "6px 10px", color: "var(--text-secondary)" }}>
+                                    {cell}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <button
                 className="btn btn-primary btn-sm"
                 onClick={handleSaveNote}
-                disabled={!noteText.trim()}
+                disabled={noteType === "text" ? !noteText.trim() : !tableRows}
               >
                 Save Note
               </button>
@@ -623,34 +849,81 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {savedNotes.map((note) => (
                 <div key={note.id} className="card-sm" style={{ padding: 16 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      marginBottom: 10,
-                    }}
-                  >
-                    <div
-                      className="avatar avatar-sm"
-                      style={{ background: note.color }}
-                    >
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                    <div className="avatar avatar-sm" style={{ background: note.color || "#7C3AED" }}>
                       {note.initials}
                     </div>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
-                        {note.author}
-                      </div>
-                      <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
-                        {note.date}
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{note.author}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{note.date}</div>
+                    </div>
+                    {note.type === "table" && (
+                      <span className="badge badge-blue" style={{ marginLeft: "auto", fontSize: 10 }}>
+                        Table
+                      </span>
+                    )}
+                  </div>
+
+                  {note.type === "table" && note.tableData ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+                      {note.text && (
+                        <p style={{ fontSize: 13.5, color: "var(--text-secondary)", margin: 0, fontWeight: 500 }}>
+                          {note.text}
+                        </p>
+                      )}
+                      <div
+                        style={{
+                          overflowX: "auto",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-md)",
+                        }}
+                      >
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, textAlign: "left" }}>
+                          <thead>
+                            <tr style={{ background: "var(--bg-muted)", borderBottom: "1px solid var(--border)" }}>
+                              {note.tableData.headers.map((h, i) => (
+                                <th
+                                  key={i}
+                                  style={{ padding: "8px 12px", fontWeight: 600, color: "var(--text-primary)" }}
+                                >
+                                  {h}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {note.tableData.rows.map((row, rowIndex) => (
+                              <tr
+                                key={rowIndex}
+                                style={{
+                                  borderBottom:
+                                    rowIndex < note.tableData.rows.length - 1 ? "1px solid var(--border-soft)" : "none",
+                                  background: rowIndex % 2 === 1 ? "var(--bg-soft)" : "none",
+                                }}
+                              >
+                                {row.map((cell, cellIndex) => (
+                                  <td key={cellIndex} style={{ padding: "8px 12px", color: "var(--text-secondary)" }}>
+                                    {cell}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
-                  </div>
-                  <p style={{ fontSize: 13.5, lineHeight: 1.65, margin: 0 }}>
-                    {note.text}
-                  </p>
+                  ) : (
+                    <p style={{ fontSize: 13.5, lineHeight: 1.65, margin: "4px 0 0", whiteSpace: "pre-wrap" }}>
+                      {note.text}
+                    </p>
+                  )}
                 </div>
               ))}
+              {savedNotes.length === 0 && (
+                <div style={{ textAlign: "center", padding: "16px 0", color: "var(--text-muted)", fontSize: 13 }}>
+                  No recruiter notes logged.
+                </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -670,29 +943,16 @@ export default function ProfilePanel({ candidate, onFavoriteToggle }) {
                 <div key={item.id} className="timeline-item" style={{ paddingBottom: 20 }}>
                   {/* Dot + connecting line */}
                   <div style={{ position: "relative", flexShrink: 0, width: 8 }}>
-                    <div
-                      className={`timeline-dot${item.active ? " active" : ""}`}
-                    />
-                    {idx < MOCK_ACTIVITY.length - 1 && (
-                      <div className="timeline-line" />
-                    )}
+                    <div className={`timeline-dot${item.active ? " active" : ""}`} />
+                    {idx < MOCK_ACTIVITY.length - 1 && <div className="timeline-line" />}
                   </div>
 
                   {/* Content */}
                   <div style={{ paddingTop: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 13.5,
-                        fontWeight: 500,
-                        color: "var(--text-primary)",
-                        marginBottom: 2,
-                      }}
-                    >
+                    <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text-primary)", marginBottom: 2 }}>
                       {item.label}
                     </div>
-                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                      {item.time}
-                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{item.time}</div>
                   </div>
                 </div>
               ))}

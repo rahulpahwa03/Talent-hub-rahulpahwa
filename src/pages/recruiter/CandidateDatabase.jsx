@@ -327,7 +327,16 @@ export default function CandidateDatabase() {
   const [allFetched, setAllFetched] = useState([]);   // raw from supabase
   const [loading, setLoading]       = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
-  const [filters, setFilters]       = useState(DEFAULT_FILTERS);
+  const [filters, setFilters]       = useState(() => {
+    const initQ = searchParams.get('q') || '';
+    const parsedInit = parseNaturalQuery(initQ);
+    return {
+      ...DEFAULT_FILTERS,
+      visa: parsedInit.visa || '',
+      location: parsedInit.location || '',
+      skills: parsedInit.skills || [],
+    };
+  });
   const [emailsCopied, setEmailsCopied] = useState(false);
 
   // ── Client-side filter + boolean search applied to fetched data ───────────────
@@ -392,6 +401,21 @@ export default function CandidateDatabase() {
     }));
   }, []);
 
+  const handleCandidateUpdate = useCallback((updatedCandidate) => {
+    setAllFetched(prev => prev.map(c => {
+      if (c.id === updatedCandidate.id || c.candidate_uuid === updatedCandidate.candidate_uuid) {
+        return { ...c, ...updatedCandidate };
+      }
+      return c;
+    }));
+    setSelectedCandidate(prev => {
+      if (prev && (prev.id === updatedCandidate.id || prev.candidate_uuid === updatedCandidate.candidate_uuid)) {
+        return { ...prev, ...updatedCandidate };
+      }
+      return prev;
+    });
+  }, []);
+
   // ── Fetch from Supabase ──────────────────────────────────────────────────────
   const fetchCandidates = useCallback(async (searchQuery) => {
     setLoading(true);
@@ -412,20 +436,20 @@ export default function CandidateDatabase() {
 
   // ── Search handler ────────────────────────────────────────────────────────────
   const handleSearch = useCallback((q) => {
-    const term = (q || query).trim();
+    const term = (typeof q === 'string' ? q : query).trim();
     setQuery(term);
 
     // Parse natural language to auto-fill filters
     const parsed = parseNaturalQuery(term);
-    const hasExtracted = parsed.visa || parsed.location || parsed.skills.length > 0;
-    if (hasExtracted) {
-      setFilters(f => ({
-        ...f,
-        ...(parsed.visa     ? { visa: parsed.visa }         : {}),
-        ...(parsed.location ? { location: parsed.location } : {}),
-        ...(parsed.skills.length > 0 ? { skills: parsed.skills } : {}),
-      }));
-    }
+    
+    // Reset search-extracted filters (visa, location, skills) to match the new query,
+    // while keeping structural status checkboxes (hasEmail, hasLinkedIn, favoritesOnly, etc.)
+    setFilters(f => ({
+      ...f,
+      visa: parsed.visa || '',
+      location: parsed.location || '',
+      skills: parsed.skills || [],
+    }));
 
     fetchCandidates(term);
   }, [query, fetchCandidates]);
@@ -646,7 +670,11 @@ export default function CandidateDatabase() {
               transition={{ duration: 0.22, ease: [0, 0, 0.2, 1] }}
               style={{ background: '#FFFFFF', minHeight: '100%', borderLeft: '1px solid var(--border)' }}
             >
-              <ProfilePanel candidate={selectedCandidate} onFavoriteToggle={handleToggleFavorite} />
+              <ProfilePanel 
+                candidate={selectedCandidate} 
+                onFavoriteToggle={handleToggleFavorite} 
+                onCandidateUpdate={handleCandidateUpdate}
+              />
             </motion.div>
           </AnimatePresence>
         </div>

@@ -415,11 +415,32 @@ function StepReview({ parsedData, onSubmit }) {
   const [form, setForm] = useState({
     ...parsedData,
     skills: Array.isArray(parsedData.skills)
-      ? parsedData.skills.join(", ")
-      : (parsedData.skills || ""),
+      ? parsedData.skills
+      : (parsedData.skills || "").split(",").map(s => s.trim()).filter(Boolean),
   });
 
+  const [skillInput, setSkillInput] = useState("");
+
   const set = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
+
+  const handleAddSkill = () => {
+    const s = skillInput.trim();
+    if (s && !form.skills.includes(s)) {
+      setForm(prev => ({ ...prev, skills: [...prev.skills, s] }));
+    }
+    setSkillInput("");
+  };
+
+  const handleRemoveSkill = (skillToRemove) => {
+    setForm(prev => ({ ...prev, skills: prev.skills.filter(s => s !== skillToRemove) }));
+  };
+
+  const handleSkillKeyDown = (e) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      handleAddSkill();
+    }
+  };
 
   /* Avatar colour */
   const avatarColors = ["#4F46E5", "#0F766E", "#7C3AED", "#B45309", "#0369A1"];
@@ -440,7 +461,7 @@ function StepReview({ parsedData, onSubmit }) {
   );
 
   const Field = ({ label, icon: Icon, fieldKey, type = "text", children }) => (
-    <div className="input-group">
+    <div className="input-group" style={{ margin: 0 }}>
       <label className="input-label" style={{ display: "flex", alignItems: "center" }}>
         {label}
         <AiBadge />
@@ -462,7 +483,7 @@ function StepReview({ parsedData, onSubmit }) {
           <input
             type={type}
             className="input"
-            value={form[fieldKey]}
+            value={form[fieldKey] || ""}
             onChange={set(fieldKey)}
             style={{ paddingLeft: Icon ? 32 : undefined }}
           />
@@ -478,85 +499,170 @@ function StepReview({ parsedData, onSubmit }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -16 }}
       transition={{ duration: 0.38, ease: [0, 0, 0.2, 1] }}
-      style={{ width: "100%", maxWidth: 900 }}
+      style={{ width: "100%", maxWidth: 940 }}
     >
       <div style={{ textAlign: "center", marginBottom: 32 }}>
         <h2 style={{ marginBottom: 8 }}>Review extracted information</h2>
-        <p style={{ fontSize: 14 }}>
+        <p style={{ fontSize: 14, color: "var(--text-secondary)" }}>
           We've pre-filled your details. Edit anything that looks off.
         </p>
       </div>
 
-      <div className="grid-2" style={{ gap: 24, alignItems: "start" }}>
-        {/* ── Left: Editable fields ── */}
-        <div
-          className="card"
-          style={{ padding: "24px", display: "flex", flexDirection: "column", gap: 16 }}
-        >
-          <p className="section-title" style={{ marginBottom: 4 }}>
-            Contact &amp; Identity
-          </p>
-          <Field label="Full Name" icon={User} fieldKey="name" />
-          <Field label="Email" icon={Mail} fieldKey="email" type="email" />
-          <Field label="Phone" icon={Phone} fieldKey="phone" />
-          <Field label="LinkedIn URL" icon={Link} fieldKey="linkedin" />
-          <Field label="Location" icon={MapPin} fieldKey="location" />
-
-          <div className="divider" style={{ margin: "4px 0" }} />
-          <p className="section-title" style={{ marginBottom: 4 }}>
-            Professional
-          </p>
-
-          <Field label="Current Title" icon={Briefcase} fieldKey="title" />
-          <Field label="Current Employer" icon={Building2} fieldKey="currentEmployer" />
-          <Field label="Years of Experience" icon={Clock} fieldKey="experience" />
-
-          {/* Visa Status */}
-          <div className="input-group">
-            <label className="input-label" style={{ display: "flex", alignItems: "center" }}>
-              Visa Status
-              <AiBadge />
-            </label>
-            <select className="input" value={form.visa} onChange={set("visa")}>
-              {VISA_OPTIONS.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
+      <div className="grid-2" style={{ gap: 24, alignItems: "start", gridTemplateColumns: "1.2fr 0.8fr" }}>
+        {/* ── Left: Editable fields grouped into clean cards ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          
+          {/* Card 1: Personal Info */}
+          <div className="card" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18 }}>
+            <h3 style={{ fontSize: 15, margin: 0, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
+              <User size={16} style={{ color: "var(--accent)" }} /> Personal Information
+            </h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <Field label="Full Name" icon={User} fieldKey="name" />
+              <Field label="Email" icon={Mail} fieldKey="email" type="email" />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <Field label="Phone" icon={Phone} fieldKey="phone" />
+              <Field label="Location" icon={MapPin} fieldKey="location" />
+            </div>
+            <Field label="LinkedIn URL" icon={Link} fieldKey="linkedin" />
           </div>
 
-          {/* Skills */}
-          <div className="input-group">
-            <label className="input-label" style={{ display: "flex", alignItems: "center" }}>
-              <Code2 size={13} style={{ marginRight: 5 }} />
-              Skills
-              <AiBadge />
-            </label>
-            <input
-              type="text"
-              className="input"
-              value={form.skills}
-              onChange={set("skills")}
-              placeholder="e.g. Python, AWS, Snowflake"
-            />
-            <span className="input-hint">Separate skills with commas</span>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
-              {form.skills
-                .split(",")
-                .map((s) => s.trim())
-                .filter(Boolean)
-                .map((s) => (
-                  <span key={s} className="tag">
+          {/* Card 2: Career & Visa */}
+          <div className="card" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18 }}>
+            <h3 style={{ fontSize: 15, margin: 0, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
+              <Briefcase size={16} style={{ color: "var(--accent)" }} /> Career &amp; Work Eligibility
+            </h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <Field label="Current Title" icon={Briefcase} fieldKey="title" />
+              <Field label="Current Employer" icon={Building2} fieldKey="currentEmployer" />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <Field label="Years of Experience" icon={Clock} fieldKey="experience" />
+              
+              <div className="input-group" style={{ margin: 0 }}>
+                <label className="input-label" style={{ display: "flex", alignItems: "center" }}>
+                  Visa Status
+                  <AiBadge />
+                </label>
+                <select className="input" value={form.visa || "Other"} onChange={set("visa")}>
+                  {VISA_OPTIONS.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Skills & Summary */}
+          <div className="card" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18 }}>
+            <h3 style={{ fontSize: 15, margin: 0, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8, fontWeight: 600 }}>
+              <Code2 size={16} style={{ color: "var(--accent)" }} /> Skills &amp; Profile Summary
+            </h3>
+            
+            {/* Interactive Skills Chip Editor */}
+            <div className="input-group" style={{ margin: 0 }}>
+              <label className="input-label" style={{ display: "flex", alignItems: "center" }}>
+                <Code2 size={13} style={{ marginRight: 5 }} />
+                Skills
+                <AiBadge />
+              </label>
+              
+              <div 
+                style={{ 
+                  display: "flex", 
+                  flexWrap: "wrap", 
+                  gap: 6, 
+                  padding: "8px 12px", 
+                  border: "1px solid var(--border)", 
+                  borderRadius: "var(--radius-md)",
+                  background: "var(--bg)",
+                  minHeight: 44,
+                  alignItems: "center"
+                }}
+              >
+                {form.skills.map((s) => (
+                  <span 
+                    key={s} 
+                    className="tag" 
+                    style={{ 
+                      display: "inline-flex", 
+                      alignItems: "center", 
+                      gap: 5,
+                      padding: "4px 8px 4px 10px",
+                      background: "var(--bg-soft)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-full)",
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: "var(--text-primary)"
+                    }}
+                  >
                     {s}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSkill(s)}
+                      style={{
+                        border: "none",
+                        background: "none",
+                        color: "var(--text-muted)",
+                        cursor: "pointer",
+                        padding: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderRadius: "50%",
+                        width: 14,
+                        height: 14
+                      }}
+                    >
+                      <XCircle size={12} />
+                    </button>
                   </span>
                 ))}
+                <input
+                  type="text"
+                  placeholder={form.skills.length === 0 ? "Type skill and press Enter or comma..." : "Add skill..."}
+                  value={skillInput}
+                  onChange={(e) => setSkillInput(e.target.value)}
+                  onKeyDown={handleSkillKeyDown}
+                  onBlur={handleAddSkill}
+                  style={{
+                    border: "none",
+                    outline: "none",
+                    fontSize: 13,
+                    flex: 1,
+                    minWidth: 100,
+                    padding: "4px 0",
+                    background: "transparent"
+                  }}
+                />
+              </div>
+              <span className="input-hint">Type a skill and press Enter or comma (,) to add. Click X to remove.</span>
+            </div>
+
+            {/* Editable Summary field */}
+            <div className="input-group" style={{ margin: 0 }}>
+              <label className="input-label" style={{ display: "flex", alignItems: "center" }}>
+                Professional Summary
+                <AiBadge />
+              </label>
+              <textarea
+                rows={4}
+                className="input"
+                value={form.summary || ""}
+                onChange={set("summary")}
+                placeholder="Brief summary of your professional background..."
+                style={{ resize: "vertical", minHeight: 90 }}
+              />
             </div>
           </div>
         </div>
 
         {/* ── Right: Profile Preview Card ── */}
-        <div style={{ position: "sticky", top: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ position: "sticky", top: 84, display: "flex", flexDirection: "column", gap: 16 }}>
           <div className="card" style={{ padding: 24 }}>
             <p className="section-title" style={{ marginBottom: 16 }}>
               Profile Preview
@@ -572,7 +678,7 @@ function StepReview({ parsedData, onSubmit }) {
               </div>
               <div>
                 <h3 style={{ marginBottom: 2 }}>{form.name || "—"}</h3>
-                <p style={{ fontSize: 13, margin: 0 }}>{form.title || "—"}</p>
+                <p style={{ fontSize: 13, margin: 0, color: "var(--text-secondary)" }}>{form.title || "—"}</p>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
                   <span className="badge badge-blue">{form.visa || "—"}</span>
                   <span className="badge badge-green">
@@ -608,16 +714,19 @@ function StepReview({ parsedData, onSubmit }) {
               Skills
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {form.skills
-                .split(",")
-                .map((s) => s.trim())
-                .filter(Boolean)
-                .slice(0, 8)
-                .map((s) => (
-                  <span key={s} className="badge badge-gray">
-                    {s}
-                  </span>
-                ))}
+              {form.skills.slice(0, 8).map((s) => (
+                <span key={s} className="badge badge-gray">
+                  {s}
+                </span>
+              ))}
+              {form.skills.length > 8 && (
+                <span className="badge badge-gray" style={{ color: "var(--text-muted)" }}>
+                  +{form.skills.length - 8} more
+                </span>
+              )}
+              {form.skills.length === 0 && (
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>No skills added yet</span>
+              )}
             </div>
           </div>
 
@@ -813,6 +922,12 @@ export default function ResumeUpload() {
         resumeText: rawText,
       });
       setSubmitResult(result);
+      if (form.email) {
+        localStorage.setItem('candidate_email', form.email.trim());
+      }
+      if (form.name) {
+        localStorage.setItem('candidate_name', form.name.trim());
+      }
       toast.success('Profile saved to EzHire!');
     } catch (err) {
       console.error('[ResumeUpload] Submit failed:', err);

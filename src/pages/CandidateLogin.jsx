@@ -67,11 +67,20 @@ export default function CandidateLogin() {
 
   const handleSignUp = (e) => {
     e.preventDefault();
+    if (signupEmail) {
+      localStorage.setItem('candidate_email', signupEmail.trim());
+    }
+    if (signupName) {
+      localStorage.setItem('candidate_name', signupName.trim());
+    }
     navigate('/candidate/upload');
   };
 
   const handleSignIn = (e) => {
     e.preventDefault();
+    if (signinEmail) {
+      localStorage.setItem('candidate_email', signinEmail.trim());
+    }
     navigate('/candidate/profile');
   };
 
