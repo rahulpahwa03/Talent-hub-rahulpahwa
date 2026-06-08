@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
 import Spinner from '../../components/ui/Spinner.jsx';
 import ExperienceSlider from '../../components/filters/ExperienceSlider.jsx';
+
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const STYLES = `
@@ -904,7 +906,7 @@ function InlineCandidateCard({ candidate, onViewProfile, onDraftEmail }) {
 }
 
 // ─── EZRA PANEL ───────────────────────────────────────────────────────────────
-function EzraPanel({ isOpen, onClose, onViewProfile, onDraftEmail, showToast }) {
+function EzraPanel({ candidates, isOpen, onClose, onViewProfile, onDraftEmail, showToast }) {
   const [messages, setMessages] = useState(buildInitialMessages);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(false);
@@ -919,11 +921,11 @@ function EzraPanel({ isOpen, onClose, onViewProfile, onDraftEmail, showToast }) 
 
   // Build candidate context string for AI
   const candidateContext = useMemo(() => {
-    return CANDIDATES.map(c => {
+    return candidates.map(c => {
       const allSkills = Object.values(c.skills || {}).flat().join(', ');
       return `ID:${c.id} | Name:${c.name} | Role:${c.role} | Status:${c.status} | Location:${c.location} | Visa:${c.visa} | Experience:${c.experience}yrs | WorkPref:${c.workPref} | AvailableFrom:${c.availableFrom} | Skills:[${allSkills}] | Summary:${c.summary}`;
     }).join('\n');
-  }, []);
+  }, [candidates]);
 
   async function getEzraResponse(userText) {
     const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY;
@@ -1067,7 +1069,7 @@ RULES:
       // Handle draft email action (format: "draftEmail:cand-X")
       if (resp.action && resp.action.startsWith('draftEmail:')) {
         const candId = resp.action.split(':')[1];
-        const candidate = CANDIDATES.find(c => c.id === candId);
+        const candidate = candidates.find(c => c.id === candId);
         if (candidate) setTimeout(() => onDraftEmail(candidate), 300);
       }
       inputRef.current?.focus();
@@ -1094,7 +1096,7 @@ RULES:
     sendMessage(prompt);
   }
 
-  const candMap = useMemo(() => Object.fromEntries(CANDIDATES.map(c => [c.id, c])), []);
+  const candMap = useMemo(() => Object.fromEntries(candidates.map(c => [c.id, c])), [candidates]);
 
   return (
     <div className={`ezra-panel${isOpen ? ' open' : ''}`}>
@@ -1456,7 +1458,7 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
 }
 
 // ─── FILTER + GRID PANEL ──────────────────────────────────────────────────────
-function CandidatesPanel({ onViewProfile, onDraftEmail, showToast }) {
+function CandidatesPanel({ candidates, onViewProfile, onDraftEmail, showToast }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [visaFilter, setVisaFilter] = useState('All');
@@ -1466,16 +1468,16 @@ function CandidatesPanel({ onViewProfile, onDraftEmail, showToast }) {
   const [selectedId, setSelectedId] = useState(null);
 
   const filtered = useMemo(() => {
-    return CANDIDATES.filter(c => {
+    return candidates.filter(c => {
       const q = search.toLowerCase();
       const matchQ = !q || c.name.toLowerCase().includes(q) || c.role.toLowerCase().includes(q) ||
-        c.location.toLowerCase().includes(q) || Object.values(c.skills).flat().some(s => s.toLowerCase().includes(q));
+        c.location.toLowerCase().includes(q) || Object.values(c.skills || {}).flat().some(s => s.toLowerCase().includes(q));
       const matchStatus = statusFilter === 'All' || c.status === statusFilter;
       const matchVisa = visaFilter === 'All' || c.visa === visaFilter;
       const matchWork = workPref === 'All' || c.workPref === workPref;
       return matchQ && matchStatus && matchVisa && matchWork && (c.experience >= expFilter);
     });
-  }, [search, statusFilter, visaFilter, workPref, expFilter]);
+  }, [candidates, search, statusFilter, visaFilter, workPref, expFilter]);
 
   const activeFilters = [statusFilter, visaFilter, workPref].filter(f => f !== 'All').length + (search ? 1 : 0) + (expFilter > 0 ? 1 : 0);
 
@@ -1555,6 +1557,7 @@ function CandidatesPanel({ onViewProfile, onDraftEmail, showToast }) {
 }
 
 // ─── ROOT COMPONENT ───────────────────────────────────────────────────────────
+// ─── ROOT COMPONENT ───────────────────────────────────────────────────────────
 export default function CandidateDatabase() {
   const navigate = useNavigate();
   const [view, setView] = useState('candidates'); // 'candidates' | 'detail'
@@ -1562,6 +1565,63 @@ export default function CandidateDatabase() {
   const [ezraOpen, setEzraOpen] = useState(true);
   const [draftTarget, setDraftTarget] = useState(null);
   const { toasts, showToast } = useToast();
+  
+  // Seed with mock data initially so nothing is empty on load
+  const [candidatesList, setCandidatesList] = useState(CANDIDATES);
+
+  // Fetch actual database candidates on mount
+  useEffect(() => {
+    async function loadCandidates() {
+      try {
+        const { data, error } = await supabase
+          .from('candidates')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching candidates from Supabase:', error);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          // Map database columns to the mapped format expected by components
+          const mapped = data.map((c, index) => {
+            const skillsArray = c["Skills"]
+              ? c["Skills"].split(/[|,]/).map(s => s.trim()).filter(Boolean)
+              : [];
+
+            return {
+              id: c.id || c.candidate_uuid || `db-${index}`,
+              name: c["Candidate Name"] || "Unknown Candidate",
+              role: c["Title"] || c["role"] || "Software Engineer",
+              status: c["status"] || "Available Now",
+              location: c["Current Location"] || "Remote",
+              visa: c["VISA"] || "USC",
+              experience: Number(c["experience"]) || 5,
+              workPref: c["work_pref"] || c["workPref"] || "Remote",
+              availableFrom: c["available_from"] || c["availableFrom"] || "Immediately",
+              email: c["Email"] || "",
+              phone: c["Contact No"] || "",
+              linkedin: c["LinkedIn"] || "",
+              resume_url: c["resume_url"] || "",
+              summary: c["summary"] || c["AI Summary"] || `${c["Candidate Name"] || "Candidate"} is an experienced professional in this field.`,
+              skills: {
+                All: skillsArray
+              },
+              history: Array.isArray(c["history"]) ? c["history"] : [
+                { company: c["current_employer"] || "Previous Company", role: c["Title"] || "Software Engineer", dates: "N/A", desc: "Experience imported from database profile." }
+              ],
+              submissions: Array.isArray(c["submissions"]) ? c["submissions"] : []
+            };
+          });
+          setCandidatesList(mapped);
+        }
+      } catch (err) {
+        console.error('Unexpected error loading candidates:', err);
+      }
+    }
+    loadCandidates();
+  }, []);
 
   // Inject styles once
   useEffect(() => {
@@ -1618,6 +1678,7 @@ export default function CandidateDatabase() {
       <div className="ezhire-body">
         {view === 'candidates' ? (
           <CandidatesPanel
+            candidates={candidatesList}
             onViewProfile={viewProfile}
             onDraftEmail={openDraftEmail}
             showToast={showToast}
@@ -1633,6 +1694,7 @@ export default function CandidateDatabase() {
 
         {/* Ezra Panel */}
         <EzraPanel
+          candidates={candidatesList}
           isOpen={ezraOpen}
           onClose={() => setEzraOpen(false)}
           onViewProfile={viewProfile}
