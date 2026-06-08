@@ -1305,9 +1305,33 @@ function CandidateGridCard({ candidate, selected, onClick, onDraftEmail }) {
   );
 }
 
+// Helper to get embeddable resume url
+function getEmbeddableResumeUrl(url) {
+  if (!url) return "";
+  const openMatch = url.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9\-_]+)/);
+  if (openMatch) {
+    return `https://drive.google.com/file/d/${openMatch[1]}/preview`;
+  }
+  const fileMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9\-_]+)/);
+  if (fileMatch) {
+    return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
+  }
+
+  const lowercaseUrl = url.toLowerCase();
+  if (
+    lowercaseUrl.endsWith(".docx") ||
+    lowercaseUrl.endsWith(".doc") ||
+    lowercaseUrl.includes(".docx?") ||
+    lowercaseUrl.includes(".doc?")
+  ) {
+    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 // ─── CANDIDATE DETAIL PAGE ────────────────────────────────────────────────────
 function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState('overview'); // 'overview' | 'resume'
   const [notes, setNotes] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
   const saveTimer = useRef(null);
@@ -1332,6 +1356,29 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
     Rejected:  { bg: '#FAECE7', text: '#993C1D' },
   };
 
+  // Ezra predictions based on profile data
+  const ezraInsights = useMemo(() => {
+    let baseRate = 45;
+    baseRate += (candidate.experience || 5) * 3.5;
+    if (candidate.role.toLowerCase().includes('architect') || candidate.role.toLowerCase().includes('lead')) baseRate += 22;
+    if (candidate.role.toLowerCase().includes('senior')) baseRate += 12;
+    if (candidate.location.toLowerCase().includes('ca') || candidate.location.toLowerCase().includes('ny') || candidate.location.toLowerCase().includes('jose') || candidate.location.toLowerCase().includes('york')) baseRate += 15;
+    if (candidate.visa === 'USC' || candidate.visa === 'GC') baseRate += 8;
+
+    const rateMin = Math.round(baseRate * 0.9);
+    const rateMax = Math.round(baseRate * 1.1);
+    
+    // Compute a mock demand and recommendation score deterministically
+    const demandScore = Math.min(65 + (candidate.experience * 2) + (Object.values(candidate.skills || {}).flat().length * 1.5), 98);
+    const recommendationScore = ((demandScore / 10) + 0.3).toFixed(1);
+
+    return {
+      rate: `$${rateMin} - $${rateMax} / hr`,
+      demand: `${Math.round(demandScore)}th Percentile (High Demand)`,
+      readiness: `${recommendationScore} / 10`
+    };
+  }, [candidate]);
+
   return (
     <div className="detail-page">
       <button className="detail-back" onClick={onBack}>
@@ -1339,8 +1386,26 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
         Back to candidates
       </button>
 
-      <div className="detail-cols">
-        {/* LEFT */}
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 16, margin: '14px 20px 8px', borderBottom: '1px solid #E8E6F0' }}>
+        <button
+          className={`tab-btn${tab === 'overview' ? ' active' : ''}`}
+          onClick={() => setTab('overview')}
+          style={{ padding: '8px 16px', background: 'none', border: 'none', borderBottom: tab === 'overview' ? '2px solid #6C5CE7' : 'none', color: tab === 'overview' ? '#6C5CE7' : '#6B6B8A', fontWeight: 600, fontSize: 13 }}
+        >
+          Overview & Insights
+        </button>
+        <button
+          className={`tab-btn${tab === 'resume' ? ' active' : ''}`}
+          onClick={() => setTab('resume')}
+          style={{ padding: '8px 16px', background: 'none', border: 'none', borderBottom: tab === 'resume' ? '2px solid #6C5CE7' : 'none', color: tab === 'resume' ? '#6C5CE7' : '#6B6B8A', fontWeight: 600, fontSize: 13 }}
+        >
+          Resume Viewer
+        </button>
+      </div>
+
+      <div className="detail-cols" style={{ padding: '0 20px 20px' }}>
+        {/* LEFT CARD */}
         <div className="detail-left">
           <div className="detail-card">
             {/* Hero */}
@@ -1381,16 +1446,10 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button className="btn-filled lg" style={{ width: '100%' }} onClick={() => onDraftEmail(candidate)}>
                 <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path stroke="#fff" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 0 0 2.22 0L21 8M5 19h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2Z"/></svg>
-                Draft submission email
+                Draft outreach email
               </button>
               <button className="btn-outlined lg" style={{ width: '100%' }} onClick={() => showToast('Added to shortlist!', 'success')}>
                 Add to shortlist
-              </button>
-              <button className="btn-ghost" style={{ width: '100%' }} onClick={() => {
-                navigator.clipboard.writeText(`${candidate.name} — ${candidate.role} — ${candidate.visa} — ${candidate.location}`);
-                showToast('Profile copied!', 'info');
-              }}>
-                Copy profile
               </button>
             </div>
 
@@ -1411,85 +1470,90 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
           </div>
         </div>
 
-        {/* RIGHT */}
-        <div className="detail-right">
-          {/* Card 1 — AI Summary */}
-          <div className="detail-card-sm">
-            <div className="detail-section-label">Ezra's summary</div>
-            <div className="summary-quote">{candidate.summary}</div>
-          </div>
+        {/* RIGHT PANEL - SWITCHED BY TABS */}
+        <div className="detail-right" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {tab === 'overview' ? (
+            <>
+              {/* Ezra Predictions & Ratings strip */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                <div style={{ background: '#F5F3FF', border: '1px solid #C4B5FD', borderRadius: 12, padding: 12, textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#6B6B8A', textTransform: 'uppercase', marginBottom: 4 }}>Predicted Rate</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#5B4FCC' }}>{ezraInsights.rate}</div>
+                </div>
+                <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: 12, textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#6B6B8A', textTransform: 'uppercase', marginBottom: 4 }}>Market Demand</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#047857' }}>{ezraInsights.demand}</div>
+                </div>
+                <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: 12, textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#6B6B8A', textTransform: 'uppercase', marginBottom: 4 }}>Ezra Match Score</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#B45309' }}>{ezraInsights.readiness}</div>
+                </div>
+              </div>
 
-          {/* Card 2 — Skills */}
-          <div className="detail-card-sm">
-            <div className="detail-section-label">Skills & technologies</div>
-            {Object.entries(candidate.skills || {}).map(([cat, skills]) => {
-              const col = getCategoryColor(cat);
-              return (
-                <div key={cat} style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 11, fontWeight: 500, color: '#A0A0B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{cat}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {skills.map(s => (
-                      <span key={s} className="skill-tag" style={{ background: col.bg, color: col.text }}>{s}</span>
-                    ))}
+              {/* Ezra's summary */}
+              <div className="detail-card-sm">
+                <div className="detail-section-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3v18M3 12h18" stroke="#6C5CE7" strokeWidth="2.5" strokeLinecap="round"/></svg>
+                  Ezra AI Summary
+                </div>
+                <div className="summary-quote">{candidate.summary}</div>
+              </div>
+
+              {/* Skills */}
+              <div className="detail-card-sm">
+                <div className="detail-section-label">Skills & technologies</div>
+                {Object.entries(candidate.skills || {}).map(([cat, skills]) => {
+                  const col = getCategoryColor(cat);
+                  return (
+                    <div key={cat} style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 11, fontWeight: 500, color: '#A0A0B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{cat}</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {skills.map(s => (
+                          <span key={s} className="skill-tag" style={{ background: col.bg, color: col.text }}>{s}</span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Work History */}
+              <div className="detail-card-sm">
+                <div className="detail-section-label">Experience</div>
+                {(candidate.history || []).map((entry, i) => (
+                  <div key={i} className="timeline-entry">
+                    <div className="timeline-left">
+                      <div className="timeline-dot" />
+                      <div className="timeline-line" />
+                    </div>
+                    <div style={{ paddingBottom: 4 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>{entry.company}</div>
+                      <div style={{ fontSize: 13, color: '#6B6B8A', marginTop: 1 }}>{entry.role}</div>
+                      <div style={{ fontSize: 12, color: '#A0A0B8', marginTop: 2 }}>{entry.dates}</div>
+                      <div style={{ fontSize: 13, color: '#6B6B8A', marginTop: 6, lineHeight: 1.6 }}>{entry.desc}</div>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Card 3 — Work History */}
-          <div className="detail-card-sm">
-            <div className="detail-section-label">Experience</div>
-            {(candidate.history || []).map((entry, i) => (
-              <div key={i} className="timeline-entry">
-                <div className="timeline-left">
-                  <div className="timeline-dot" />
-                  <div className="timeline-line" />
-                </div>
-                <div style={{ paddingBottom: 4 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>{entry.company}</div>
-                  <div style={{ fontSize: 13, color: '#6B6B8A', marginTop: 1 }}>{entry.role}</div>
-                  <div style={{ fontSize: 12, color: '#A0A0B8', marginTop: 2 }}>{entry.dates}</div>
-                  <div style={{ fontSize: 13, color: '#6B6B8A', marginTop: 6, lineHeight: 1.6 }}>{entry.desc}</div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-
-          {/* Card 4 — Submission History */}
-          <div className="detail-card-sm">
-            <div className="detail-section-label">Submission history</div>
-            {candidate.submissions && candidate.submissions.length > 0 ? (
-              <table className="sub-table">
-                <thead>
-                  <tr>
-                    <th>Client</th><th>Role</th><th>Date</th><th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {candidate.submissions.map((s, i) => {
-                    const st = statuses[s.status] || { bg: '#F7F6FB', text: '#6B6B8A' };
-                    return (
-                      <tr key={i}>
-                        <td style={{ fontWeight: 500 }}>{s.client}</td>
-                        <td style={{ color: '#6B6B8A' }}>{s.role}</td>
-                        <td style={{ color: '#A0A0B8' }}>{s.date}</td>
-                        <td>
-                          <span style={{ fontSize: 11, fontWeight: 500, background: st.bg, color: st.text, borderRadius: 20, padding: '3px 10px' }}>{s.status}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '28px 0', color: '#A0A0B8' }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
-                <div style={{ fontSize: 14, marginBottom: 4 }}>No submissions yet</div>
-                <button className="btn-ghost sm" style={{ margin: '8px auto 0' }} onClick={() => onDraftEmail(candidate)}>Start a submission</button>
-              </div>
-            )}
-          </div>
+            </>
+          ) : (
+            /* Resume Viewer Document Tab */
+            <div className="detail-card-sm" style={{ flex: 1, minHeight: '520px', display: 'flex', flexDirection: 'column' }}>
+              <div className="detail-section-label" style={{ marginBottom: 12 }}>Resume Document</div>
+              {candidate.resume_url ? (
+                <iframe
+                  src={getEmbeddableResumeUrl(candidate.resume_url)}
+                  style={{ width: '100%', flex: 1, border: '1px solid #E8E6F0', borderRadius: 8, background: '#fff' }}
+                  title={`${candidate.name} Resume`}
+                />
+              ) : (
+                <div style={{ display: 'flex', flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#A0A0B8', padding: '40px 0' }}>
+                  <svg width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>
+                  <span style={{ fontSize: 14, fontWeight: 500, marginTop: 12 }}>No resume document linked.</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
