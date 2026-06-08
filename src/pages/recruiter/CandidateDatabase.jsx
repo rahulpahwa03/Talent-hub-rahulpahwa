@@ -673,7 +673,7 @@ ${candidate.notes || ""}
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F7F6FB] text-[#1A1A2E] font-sans antialiased">
+    <div className="flex flex-col h-screen overflow-hidden bg-[#F7F6FB] text-[#1A1A2E] font-sans antialiased">
       {/* ── Custom CSS Animations Block ──────────────────────── */}
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes pulse {
@@ -1470,7 +1470,7 @@ ${candidate.notes || ""}
                 </div>
 
                 {/* AI Summary Block */}
-                <div className="border-l-3 border-[#6C5CE7] bg-[#F7F6FB] rounded-lg p-3 relative flex flex-col gap-2">
+                <div className="bg-[#F7F6FB] rounded-lg p-3 relative flex flex-col gap-2" style={{ borderLeft: `3px solid ${BRAND_PURPLE}` }}>
                   <div className="flex justify-between items-center">
                     <span className="text-[11px] font-bold text-[#6C5CE7] uppercase tracking-widest flex items-center gap-1.5">
                       <Sparkles size={11} className="fill-[#6C5CE7]/10" />
@@ -1780,8 +1780,8 @@ function CandidateCard({ candidate, onOpenProfile, onOpenDraftEmail, onToggleBoo
 
       {/* Row 3: AI Summary Box */}
       <div
-        className="border-l-3 border-[#6C5CE7] bg-[#F7F6FB] rounded-lg p-2.5 mb-4 flex flex-col justify-center"
-        style={{ minHeight: 52 }}
+        className="bg-[#F7F6FB] rounded-lg p-2.5 mb-4 flex flex-col justify-center"
+        style={{ minHeight: 52, borderLeft: `3px solid ${BRAND_PURPLE}` }}
       >
         {isGeneratingSummary ? (
           <div className="flex flex-col gap-1.5 w-full">
