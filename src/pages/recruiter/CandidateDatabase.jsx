@@ -917,7 +917,95 @@ function EzraPanel({ isOpen, onClose, onViewProfile, onDraftEmail, showToast }) 
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, typing]);
 
-  function getEzraResponse(userText) {
+  // Build candidate context string for AI
+  const candidateContext = useMemo(() => {
+    return CANDIDATES.map(c => {
+      const allSkills = Object.values(c.skills || {}).flat().join(', ');
+      return `ID:${c.id} | Name:${c.name} | Role:${c.role} | Status:${c.status} | Location:${c.location} | Visa:${c.visa} | Experience:${c.experience}yrs | WorkPref:${c.workPref} | AvailableFrom:${c.availableFrom} | Skills:[${allSkills}] | Summary:${c.summary}`;
+    }).join('\n');
+  }, []);
+
+  async function getEzraResponse(userText) {
+    const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY;
+
+    // If no API key, fall back to keyword matching
+    if (!OPENROUTER_KEY) {
+      return getEzraResponseFallback(userText);
+    }
+
+    try {
+      const systemPrompt = `You are Ezra, an AI recruiting assistant for EzHire. You help recruiters find candidates from their database.
+
+Here is the current candidate database:
+${candidateContext}
+
+RULES:
+1. When the user asks about candidates, search through the database above and return relevant matches.
+2. Always be specific — mention candidate names, skills, visa status, location, and experience.
+3. If you find matching candidates, include their IDs in a JSON block at the END of your response like this: <!-- CARDS:["cand-1","cand-3"] -->
+4. If the user asks to draft an email for a specific candidate, add <!-- ACTION:draftEmail:cand-X --> at the end.
+5. Keep responses concise but helpful (2-4 sentences max).
+6. If no candidates match, say so and suggest broadening the search.
+7. You can answer general recruiting questions too.
+8. Never make up candidates that aren't in the database.`;
+
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENROUTER_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': window.location.origin,
+          'X-Title': 'EzHire Recruiter Platform',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.0-flash-001',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...messages.filter(m => m.role === 'user' || m.role === 'ezra').slice(-6).map(m => ({
+              role: m.role === 'ezra' ? 'assistant' : 'user',
+              content: m.text,
+            })),
+            { role: 'user', content: userText },
+          ],
+          max_tokens: 400,
+          temperature: 0.4,
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn('OpenRouter API error:', response.status);
+        return getEzraResponseFallback(userText);
+      }
+
+      const data = await response.json();
+      const content = data?.choices?.[0]?.message?.content || '';
+
+      // Extract card IDs from <!-- CARDS:["cand-1","cand-2"] -->
+      let cards = null;
+      const cardsMatch = content.match(/<!--\s*CARDS:\s*(\[.*?\])\s*-->/);
+      if (cardsMatch) {
+        try { cards = JSON.parse(cardsMatch[1]); } catch(e) {}
+      }
+
+      // Extract action from <!-- ACTION:draftEmail:cand-X -->
+      let action = null;
+      const actionMatch = content.match(/<!--\s*ACTION:draftEmail:(cand-\d+)\s*-->/);
+      if (actionMatch) {
+        action = 'draftEmail:' + actionMatch[1];
+      }
+
+      // Clean the visible text (remove HTML comments)
+      const cleanText = content.replace(/<!--.*?-->/g, '').trim();
+
+      return { text: cleanText || "I couldn't process that. Try asking about specific skills, locations, or visa types.", cards, action };
+    } catch (err) {
+      console.error('Ezra AI error:', err);
+      return getEzraResponseFallback(userText);
+    }
+  }
+
+  // Fallback keyword-based responses when API is unavailable
+  function getEzraResponseFallback(userText) {
     const t = userText.toLowerCase();
     if (t.includes('java') || t.includes('developer') || t.includes('available')) {
       return {
@@ -947,7 +1035,7 @@ function EzraPanel({ isOpen, onClose, onViewProfile, onDraftEmail, showToast }) 
       return {
         text: "Opening draft email for Suresh Balakrishnan now. You can customize the subject, recipients, and body before sending.",
         cards: null,
-        action: 'draftSuresh',
+        action: 'draftEmail:cand-1',
       };
     }
     if (t.includes('cloud') || t.includes('azure') || t.includes('aws')) {
@@ -956,19 +1044,13 @@ function EzraPanel({ isOpen, onClose, onViewProfile, onDraftEmail, showToast }) 
         cards: ['cand-1', 'cand-6'],
       };
     }
-    if (t.includes('refine') || t.includes('narrow')) {
-      return {
-        text: "Sure — tell me more specifics. What skills, location, visa, or experience level are most important for this role?",
-        cards: null,
-      };
-    }
     return {
       text: "Got it. Let me search for candidates matching that criteria. Try being more specific — for example: 'Java developers in Texas with H1B' or 'senior cloud architects available now'.",
       cards: null,
     };
   }
 
-  function sendMessage(text) {
+  async function sendMessage(text) {
     if (!text.trim()) return;
     const userMsg = { id: `u${Date.now()}`, role: 'user', text: text.trim(), time: now() };
     setMessages(p => [...p, userMsg]);
@@ -976,18 +1058,24 @@ function EzraPanel({ isOpen, onClose, onViewProfile, onDraftEmail, showToast }) 
     setChipsVisible(false);
     setTyping(true);
 
-    setTimeout(() => {
-      const resp = getEzraResponse(text);
+    try {
+      const resp = await getEzraResponse(text);
       setTyping(false);
       const ezraMsg = { id: `e${Date.now()}`, role: 'ezra', text: resp.text, time: now(), cards: resp.cards || null };
       setMessages(p => [...p, ezraMsg]);
 
-      if (resp.action === 'draftSuresh') {
-        const suresh = CANDIDATES.find(c => c.id === 'cand-1');
-        if (suresh) setTimeout(() => onDraftEmail(suresh), 300);
+      // Handle draft email action (format: "draftEmail:cand-X")
+      if (resp.action && resp.action.startsWith('draftEmail:')) {
+        const candId = resp.action.split(':')[1];
+        const candidate = CANDIDATES.find(c => c.id === candId);
+        if (candidate) setTimeout(() => onDraftEmail(candidate), 300);
       }
       inputRef.current?.focus();
-    }, 900 + Math.random() * 500);
+    } catch (err) {
+      setTyping(false);
+      const errorMsg = { id: `e${Date.now()}`, role: 'ezra', text: "Sorry, I hit an error. Try again or rephrase your question.", time: now(), cards: null };
+      setMessages(p => [...p, errorMsg]);
+    }
   }
 
   function handleKeyDown(e) {
