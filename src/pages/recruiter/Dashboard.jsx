@@ -17,12 +17,16 @@ import {
   RefreshCw,
   FileText,
   AlertCircle,
-  X
+  X,
+  MapPin,
+  Shield,
+  Mail
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { applyBooleanSearch } from '../../components/ai/AISearchBar';
 import { calculateMatchScore } from '../../components/candidates/CandidateCard';
+import ProfilePanel from '../../components/ProfilePanel';
 
 // ─── Constants & Predefined Mappings ────────────────────────
 const CLIENT_DATABASE = {
@@ -217,6 +221,7 @@ export default function RecruiterDashboard() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState(0);
   const [report, setReport] = useState(null);
+  const [selectedDashboardCandidate, setSelectedDashboardCandidate] = useState(null);
 
   // Load candidate base once
   useEffect(() => {
@@ -310,6 +315,7 @@ export default function RecruiterDashboard() {
     setJdText("");
     setKeywords([]);
     setKeywordInput("");
+    setSelectedDashboardCandidate(null);
   };
 
   const handleClearInputs = () => {
@@ -317,6 +323,50 @@ export default function RecruiterDashboard() {
     setJdText("");
     setKeywords([]);
     setKeywordInput("");
+  };
+
+  const handleToggleFavorite = async (candidateId) => {
+    if (report) {
+      const updatedMatches = report.matches.map(c => {
+        if (c.id === candidateId || c.candidate_uuid === candidateId) {
+          const nextFav = !c.favorite;
+          supabase
+            .from('candidates')
+            .update({ favorite: nextFav })
+            .or(`id.eq.${candidateId},candidate_uuid.eq.${candidateId}`)
+            .then(({ error }) => {
+              if (error) console.warn('Favorite update failed:', error.message);
+            });
+          return { ...c, favorite: nextFav };
+        }
+        return c;
+      });
+      setReport({ ...report, matches: updatedMatches });
+    }
+    setSelectedDashboardCandidate(prev => {
+      if (prev && (prev.id === candidateId || prev.candidate_uuid === candidateId)) {
+        return { ...prev, favorite: !prev.favorite };
+      }
+      return prev;
+    });
+  };
+
+  const handleCandidateUpdate = (updatedCandidate) => {
+    if (report) {
+      const updatedMatches = report.matches.map(c => {
+        if (c.id === updatedCandidate.id || c.candidate_uuid === updatedCandidate.candidate_uuid) {
+          return { ...c, ...updatedCandidate };
+        }
+        return c;
+      });
+      setReport({ ...report, matches: updatedMatches });
+    }
+    setSelectedDashboardCandidate(prev => {
+      if (prev && (prev.id === updatedCandidate.id || prev.candidate_uuid === updatedCandidate.candidate_uuid)) {
+        return { ...prev, ...updatedCandidate };
+      }
+      return prev;
+    });
   };
 
   const handleLaunchDatabase = (queryToRun) => {
@@ -327,8 +377,8 @@ export default function RecruiterDashboard() {
     <div
       style={{
         minHeight: 'calc(100vh - 56px)',
-        background: '#0F172A', // Pure slate-dark background
-        color: '#F1F5F9', // Light slate text
+        background: '#FFFFFF', // Pure white background
+        color: '#0F172A', // Dark slate text
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -340,9 +390,9 @@ export default function RecruiterDashboard() {
       }}
     >
       {/* Floating Ambient Background Blobs */}
-      <FloatingBlob color="#6366F1" size={350} duration={18} delay={0} initialX="10%" initialY="20%" driftRange={30} />
-      <FloatingBlob color="#475569" size={400} duration={22} delay={2} initialX="50%" initialY="40%" driftRange={40} />
-      <FloatingBlob color="#334155" size={300} duration={15} delay={4} initialX="30%" initialY="10%" driftRange={25} />
+      <FloatingBlob color="#EEF2F6" size={350} duration={18} delay={0} initialX="10%" initialY="20%" driftRange={30} />
+      <FloatingBlob color="#E2E8F0" size={400} duration={22} delay={2} initialX="50%" initialY="40%" driftRange={40} />
+      <FloatingBlob color="#F1F5F9" size={300} duration={15} delay={4} initialX="30%" initialY="10%" driftRange={25} />
 
       <div style={{ width: '100%', maxWidth: 780, position: 'relative', zIndex: 1 }}>
         
@@ -353,26 +403,26 @@ export default function RecruiterDashboard() {
               width: 52,
               height: 52,
               borderRadius: "50%",
-              background: "#1E293B", // Steel slate background
-              border: "1.5px solid #475569", // Charcoal border
+              background: "#F8FAFC", // Light gray background
+              border: "1.5px solid #E2E8F0",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: "#F1F5F9",
-              boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+              color: "#0F172A",
+              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
             }}
           >
             <Brain size={24} style={{ animation: isAnalyzing ? "spin 3s linear infinite" : "none" }} />
           </div>
 
           <div>
-            <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px', color: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               Ezra Recruiting Core
-              <span style={{ fontSize: 9, color: '#94A3B8', background: '#1E293B', border: '1px solid #475569', fontWeight: 600, padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <span style={{ fontSize: 9, color: '#475569', background: '#F8FAFC', border: '1px solid #E2E8F0', fontWeight: 600, padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 AI Recruiter
               </span>
             </h2>
-            <p style={{ fontSize: 13, color: '#94A3B8', margin: 0, maxWidth: 520, lineHeight: 1.5 }}>
+            <p style={{ fontSize: 13, color: '#475569', margin: 0, maxWidth: 520, lineHeight: 1.5 }}>
               Ingesting talent pools, checking client competitors, and mapping work eligibilities to support recruiter pipelines.
             </p>
           </div>
@@ -391,20 +441,20 @@ export default function RecruiterDashboard() {
               {/* Sourcing Intake Panel — Claude/Modern AI Composer */}
               <div
                 style={{
-                  background: 'rgba(30, 41, 59, 0.7)', // Translucent steel slate
+                  background: 'rgba(255, 255, 255, 0.8)', // Light glass card background
                   backdropFilter: 'blur(16px)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(15, 23, 42, 0.08)',
                   borderRadius: 16,
                   padding: 24,
-                  boxShadow: '0 20px 40px rgba(0, 0, 0, 0.25)',
+                  boxShadow: '0 20px 40px rgba(15, 23, 42, 0.05)',
                 }}
               >
                 {/* Tabs selection */}
-                <div style={{ display: 'flex', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', gap: 20, marginBottom: 20 }}>
+                <div style={{ display: 'flex', borderBottom: '1px solid rgba(15, 23, 42, 0.08)', gap: 20, marginBottom: 20 }}>
                   {[
-                    { id: 'jd', label: '📝 Job Description' },
-                    { id: 'client', label: '🏢 Target Client' },
-                    { id: 'keywords', label: '🔑 Sourcing Keywords' }
+                    { id: 'jd', label: 'Job Description', icon: <FileText size={14} /> },
+                    { id: 'client', label: 'Target Client', icon: <Building size={14} /> },
+                    { id: 'keywords', label: 'Sourcing Keywords', icon: <Layers size={14} /> }
                   ].map(tab => {
                     const active = activeTab === tab.id;
                     return (
@@ -415,8 +465,8 @@ export default function RecruiterDashboard() {
                         style={{
                           background: 'none',
                           border: 'none',
-                          color: active ? '#FFF' : '#94A3B8',
-                          borderBottom: active ? '2px solid #FFF' : '2px solid transparent',
+                          color: active ? '#0F172A' : '#64748B',
+                          borderBottom: active ? '2px solid #0F172A' : '2px solid transparent',
                           padding: '10px 4px',
                           fontSize: 13,
                           fontWeight: active ? 600 : 500,
@@ -427,6 +477,7 @@ export default function RecruiterDashboard() {
                           gap: 6,
                         }}
                       >
+                        {tab.icon}
                         {tab.label}
                       </button>
                     );
@@ -450,9 +501,9 @@ export default function RecruiterDashboard() {
                         value={jdText}
                         onChange={(e) => setJdText(e.target.value)}
                         style={{
-                          background: 'rgba(15, 23, 42, 0.6)',
-                          border: '1.5px solid rgba(255, 255, 255, 0.06)',
-                          color: '#FFF',
+                          background: '#FFFFFF',
+                          border: '1.5px solid rgba(15, 23, 42, 0.08)',
+                          color: '#0F172A',
                           borderRadius: 12,
                           padding: '14px 16px',
                           fontSize: 13.5,
@@ -462,8 +513,8 @@ export default function RecruiterDashboard() {
                           lineHeight: 1.5,
                           outline: 'none',
                         }}
-                        onFocus={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)'}
-                        onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.06)'}
+                        onFocus={(e) => e.target.style.borderColor = 'rgba(15, 23, 42, 0.2)'}
+                        onBlur={(e) => e.target.style.borderColor = 'rgba(15, 23, 42, 0.08)'}
                       />
                     </motion.div>
                   )}
@@ -483,18 +534,18 @@ export default function RecruiterDashboard() {
                         value={clientName}
                         onChange={(e) => setClientName(e.target.value)}
                         style={{
-                          background: 'rgba(15, 23, 42, 0.6)',
-                          border: '1.5px solid rgba(255, 255, 255, 0.06)',
-                          color: '#FFF',
+                          background: '#FFFFFF',
+                          border: '1.5px solid rgba(15, 23, 42, 0.08)',
+                          color: '#0F172A',
                           borderRadius: 12,
                           padding: '12px 16px',
                           fontSize: 13.5,
                           outline: 'none',
                         }}
-                        onFocus={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)'}
-                        onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.06)'}
+                        onFocus={(e) => e.target.style.borderColor = 'rgba(15, 23, 42, 0.2)'}
+                        onBlur={(e) => e.target.style.borderColor = 'rgba(15, 23, 42, 0.08)'}
                       />
-                      <span className="input-hint" style={{ color: '#94A3B8', fontSize: 11, marginTop: 6, display: 'block' }}>
+                      <span className="input-hint" style={{ color: '#64748B', fontSize: 11, marginTop: 6, display: 'block' }}>
                         Ezra leverages predefined profiles to map industry spaces, find target competitors, and match candidates from those firms.
                       </span>
                     </motion.div>
@@ -510,8 +561,8 @@ export default function RecruiterDashboard() {
                       <div
                         onClick={() => document.getElementById('keyword-composer-input')?.focus()}
                         style={{
-                          background: 'rgba(15, 23, 42, 0.6)',
-                          border: '1.5px solid rgba(255, 255, 255, 0.06)',
+                          background: '#FFFFFF',
+                          border: '1.5px solid rgba(15, 23, 42, 0.08)',
                           borderRadius: 12,
                           padding: '10px 14px',
                           minHeight: 80,
@@ -533,9 +584,9 @@ export default function RecruiterDashboard() {
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: 6,
-                                background: '#334155',
-                                border: '1px solid rgba(255, 255, 255, 0.05)',
-                                color: '#E2E8F0',
+                                background: '#F1F5F9',
+                                border: '1px solid #E2E8F0',
+                                color: '#334155',
                                 padding: '3px 10px',
                                 borderRadius: 8,
                                 fontSize: 12,
@@ -552,7 +603,7 @@ export default function RecruiterDashboard() {
                                 style={{
                                   background: 'none',
                                   border: 'none',
-                                  color: '#94A3B8',
+                                  color: '#64748B',
                                   cursor: 'pointer',
                                   display: 'flex',
                                   alignItems: 'center',
@@ -588,7 +639,7 @@ export default function RecruiterDashboard() {
                             background: 'transparent',
                             border: 'none',
                             outline: 'none',
-                            color: '#FFF',
+                            color: '#0F172A',
                             fontSize: 13,
                             minWidth: 160,
                             padding: '4px 0',
@@ -610,9 +661,9 @@ export default function RecruiterDashboard() {
                               }
                             }}
                             style={{
-                              background: 'rgba(30, 41, 59, 0.4)',
-                              border: '1px solid rgba(255,255,255,0.04)',
-                              color: '#94A3B8',
+                              background: '#F8FAFC',
+                              border: '1px solid #E2E8F0',
+                              color: '#64748B',
                               padding: '3px 10px',
                               borderRadius: '99px',
                               fontSize: 11,
@@ -620,12 +671,12 @@ export default function RecruiterDashboard() {
                               transition: 'all 0.15s',
                             }}
                             onMouseEnter={e => {
-                              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
-                              e.currentTarget.style.color = '#FFF';
+                              e.currentTarget.style.borderColor = '#CBD5E1';
+                              e.currentTarget.style.color = '#0F172A';
                             }}
                             onMouseLeave={e => {
-                              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)';
-                              e.currentTarget.style.color = '#94A3B8';
+                              e.currentTarget.style.borderColor = '#E2E8F0';
+                              e.currentTarget.style.color = '#64748B';
                             }}
                           >
                             + {item}
@@ -641,7 +692,7 @@ export default function RecruiterDashboard() {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderTop: '1px solid rgba(15, 23, 42, 0.08)',
                       paddingTop: 16,
                       marginTop: 4,
                     }}
@@ -658,8 +709,8 @@ export default function RecruiterDashboard() {
                           onClick={handleClearInputs}
                           style={{
                             background: 'transparent',
-                            border: '1px solid #334155',
-                            color: '#94A3B8',
+                            border: '1px solid #E2E8F0',
+                            color: '#64748B',
                             borderRadius: 8,
                             padding: '6px 14px',
                             fontSize: 12.5,
@@ -668,12 +719,12 @@ export default function RecruiterDashboard() {
                             transition: 'all 0.15s',
                           }}
                           onMouseEnter={e => {
-                            e.currentTarget.style.borderColor = '#475569';
-                            e.currentTarget.style.color = '#FFF';
+                            e.currentTarget.style.borderColor = '#CBD5E1';
+                            e.currentTarget.style.color = '#0F172A';
                           }}
                           onMouseLeave={e => {
-                            e.currentTarget.style.borderColor = '#334155';
-                            e.currentTarget.style.color = '#94A3B8';
+                            e.currentTarget.style.borderColor = '#E2E8F0';
+                            e.currentTarget.style.color = '#64748B';
                           }}
                         >
                           Clear
@@ -683,9 +734,9 @@ export default function RecruiterDashboard() {
                       <button
                         type="submit"
                         style={{
-                          background: '#F1F5F9', // clean charcoal/light contrast button
+                          background: '#0F172A', // clean dark primary button
                           border: 'none',
-                          color: '#0F172A',
+                          color: '#FFFFFF',
                           borderRadius: 8,
                           padding: '8px 18px',
                           fontSize: 12.5,
@@ -711,8 +762,8 @@ export default function RecruiterDashboard() {
               {/* Ezra Empathy/Staffing Grind Footer */}
               <div
                 style={{
-                  background: 'rgba(30, 41, 59, 0.4)',
-                  border: '1px dashed rgba(255, 255, 255, 0.08)',
+                  background: 'rgba(248, 250, 252, 0.6)',
+                  border: '1px dashed rgba(15, 23, 42, 0.08)',
                   borderRadius: 12,
                   padding: 16,
                   display: 'flex',
@@ -720,12 +771,12 @@ export default function RecruiterDashboard() {
                   alignItems: 'flex-start',
                 }}
               >
-                <Cpu size={16} style={{ color: '#94A3B8', marginTop: 2, flexShrink: 0 }} />
+                <Cpu size={16} style={{ color: '#64748B', marginTop: 2, flexShrink: 0 }} />
                 <div>
-                  <h4 style={{ fontSize: 12.5, margin: '0 0 4px', color: '#E2E8F0', fontWeight: 600 }}>
+                  <h4 style={{ fontSize: 12.5, margin: '0 0 4px', color: '#1E293B', fontWeight: 600 }}>
                     Empathetic AI Recruiter Core
                   </h4>
-                  <p style={{ fontSize: 12, color: '#94A3B8', lineHeight: 1.5, margin: 0 }}>
+                  <p style={{ fontSize: 12, color: '#64748B', lineHeight: 1.5, margin: 0 }}>
                     Recruitment is hard work. Manually compiling Boolean strings, parsing candidate work authorizations, and double-checking target pools takes hours. Drop your requirements, client targets, or keywords. I will immediately analyze the domain, list key competitor companies, output clean Boolean filters, and source from your talent database.
                   </p>
                 </div>
@@ -741,13 +792,13 @@ export default function RecruiterDashboard() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
               style={{
-                background: 'rgba(30, 41, 59, 0.7)',
+                background: 'rgba(255, 255, 255, 0.8)',
                 backdropFilter: 'blur(16px)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(15, 23, 42, 0.08)',
                 borderRadius: 16,
                 padding: 30,
                 textAlign: 'center',
-                boxShadow: '0 20px 40px rgba(0, 0, 0, 0.25)',
+                boxShadow: '0 20px 40px rgba(15, 23, 42, 0.05)',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
@@ -777,7 +828,7 @@ export default function RecruiterDashboard() {
                         display: 'flex',
                         alignItems: 'center',
                         gap: 10,
-                        color: completed ? '#10B981' : active ? '#FFF' : '#475569',
+                        color: completed ? '#10B981' : active ? '#0F172A' : '#64748B',
                         fontWeight: active ? 600 : 400,
                         fontSize: 12.5,
                         transition: 'color 0.2s',
@@ -786,9 +837,9 @@ export default function RecruiterDashboard() {
                       {completed ? (
                         <CheckCircle2 size={14} style={{ color: '#10B981', flexShrink: 0 }} />
                       ) : active ? (
-                        <RefreshCw size={12} style={{ animation: "spin 1s linear infinite", color: '#94A3B8', flexShrink: 0 }} />
+                        <RefreshCw size={12} style={{ animation: "spin 1s linear infinite", color: '#64748B', flexShrink: 0 }} />
                       ) : (
-                        <div style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid #475569', flexShrink: 0 }} />
+                        <div style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid #E2E8F0', flexShrink: 0 }} />
                       )}
                       <span>{step.label}</span>
                     </div>
@@ -810,34 +861,34 @@ export default function RecruiterDashboard() {
               {/* Intel Dashboard Card */}
               <div
                 style={{
-                  background: 'rgba(30, 41, 59, 0.7)',
+                  background: 'rgba(255, 255, 255, 0.8)',
                   backdropFilter: 'blur(16px)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(15, 23, 42, 0.08)',
                   borderRadius: 16,
                   padding: 24,
-                  boxShadow: '0 20px 40px rgba(0, 0, 0, 0.25)',
+                  boxShadow: '0 20px 40px rgba(15, 23, 42, 0.05)',
                 }}
               >
                 {/* Header Action */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: 12 }}>
-                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#FFF', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Terminal size={15} style={{ color: '#94A3B8' }} /> Sourcing Intelligence Report
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid rgba(15, 23, 42, 0.08)', paddingBottom: 12 }}>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Terminal size={15} style={{ color: '#64748B' }} /> Sourcing Intelligence Report
                   </h3>
                   <button
                     onClick={handleReset}
                     style={{
                       background: 'transparent',
-                      border: '1px solid #475569',
+                      border: '1px solid #E2E8F0',
                       borderRadius: 8,
                       fontSize: 12,
                       padding: '4px 12px',
-                      color: '#94A3B8',
+                      color: '#64748B',
                       cursor: 'pointer',
                       fontWeight: 500,
                       transition: 'all 0.15s',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#64748B'; e.currentTarget.style.color = '#FFF'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#475569'; e.currentTarget.style.color = '#94A3B8'; }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.color = '#0F172A'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.color = '#64748B'; }}
                   >
                     Reset Sourcing
                   </button>
@@ -852,8 +903,8 @@ export default function RecruiterDashboard() {
                     {/* Ezra Dialogue bubble */}
                     <div
                       style={{
-                        background: 'rgba(15, 23, 42, 0.5)',
-                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                        background: 'rgba(248, 250, 252, 0.6)',
+                        border: '1px solid rgba(15, 23, 42, 0.06)',
                         borderRadius: 12,
                         padding: 16,
                         position: 'relative',
@@ -866,35 +917,35 @@ export default function RecruiterDashboard() {
                             width: 28,
                             height: 28,
                             borderRadius: '50%',
-                            background: '#1E293B',
-                            border: '1px solid #475569',
+                            background: '#F8FAFC',
+                            border: '1.5px solid #E2E8F0',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#FFF',
+                            color: '#0F172A',
                           }}
                         >
                           <Brain size={14} />
                         </div>
                         <div>
-                          <div style={{ fontSize: 12.5, fontWeight: 700, color: '#FFF' }}>Ezra AI Agent</div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A' }}>Ezra AI Agent</div>
                           <div style={{ fontSize: 10, color: '#64748B' }}>Recruiter Copilot</div>
                         </div>
                       </div>
 
-                      <p style={{ fontSize: 12.5, color: '#CBD5E1', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-line' }}>
+                      <p style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-line' }}>
                         {getEzraCommentary(report)}
                       </p>
                     </div>
 
                     {/* Target skills info */}
-                    <div style={{ background: 'rgba(15, 23, 42, 0.3)', border: '1px solid rgba(255, 255, 255, 0.03)', borderRadius: 12, padding: 14 }}>
+                    <div style={{ background: 'rgba(248, 250, 252, 0.4)', border: '1px solid rgba(15, 23, 42, 0.04)', borderRadius: 12, padding: 14 }}>
                       <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, fontWeight: 700 }}>
                         Identified Skills Stack
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         {report.skills.map((s, i) => (
-                          <span key={i} style={{ fontSize: 10.5, background: '#1E293B', border: '1px solid rgba(255, 255, 255, 0.05)', color: '#E2E8F0', padding: '2px 6px', borderRadius: 4 }}>
+                          <span key={i} style={{ fontSize: 10.5, background: '#F1F5F9', border: '1px solid #E2E8F0', color: '#334155', padding: '2px 6px', borderRadius: 4 }}>
                             {s}
                           </span>
                         ))}
@@ -912,7 +963,7 @@ export default function RecruiterDashboard() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     
                     {/* Boolean query box */}
-                    <div style={{ background: '#0F172A', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: 12, padding: 14 }}>
+                    <div style={{ background: '#F8FAFC', border: '1px solid rgba(15, 23, 42, 0.04)', borderRadius: 12, padding: 14 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <span style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
                           Formulated Boolean Query
@@ -921,20 +972,20 @@ export default function RecruiterDashboard() {
                           Optimized
                         </span>
                       </div>
-                      <code style={{ display: 'block', fontSize: 12, color: '#E2E8F0', fontFamily: 'monospace', wordBreak: 'break-all', padding: 8, background: '#090D16', borderRadius: 6, border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                      <code style={{ display: 'block', fontSize: 12, color: '#0F172A', fontFamily: 'monospace', wordBreak: 'break-all', padding: 8, background: '#FFFFFF', borderRadius: 6, border: '1px solid rgba(15, 23, 42, 0.06)' }}>
                         {report.query}
                       </code>
                     </div>
 
                     {/* Target competitors box */}
-                    <div style={{ background: 'rgba(15, 23, 42, 0.3)', border: '1px solid rgba(255, 255, 255, 0.03)', borderRadius: 12, padding: 14 }}>
+                    <div style={{ background: 'rgba(248, 250, 252, 0.4)', border: '1px solid rgba(15, 23, 42, 0.04)', borderRadius: 12, padding: 14 }}>
                       <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, fontWeight: 700 }}>
                         Target Sourcing Pool (Competitor Firms)
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
                         {report.competitors.map((comp, idx) => (
-                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#E2E8F0' }}>
-                            <span style={{ width: 14, height: 14, borderRadius: '50%', background: '#1E293B', border: '1px solid rgba(255, 255, 255, 0.05)', color: '#94A3B8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
+                            <span style={{ width: 14, height: 14, borderRadius: '50%', background: '#F1F5F9', border: '1px solid #E2E8F0', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>
                               {idx + 1}
                             </span>
                             <span>{comp}</span>
@@ -953,8 +1004,8 @@ export default function RecruiterDashboard() {
                           onClick={() => handleLaunchDatabase(report.query)}
                           style={{
                             background: 'transparent',
-                            border: '1px solid #475569',
-                            color: '#FFF',
+                            border: '1px solid #E2E8F0',
+                            color: '#334155',
                             borderRadius: 8,
                             padding: '4px 10px',
                             fontSize: 11.5,
@@ -965,7 +1016,7 @@ export default function RecruiterDashboard() {
                             fontWeight: 600,
                             transition: 'all 0.15s',
                           }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#1E293B'}
+                          onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
                           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         >
                           Review All Pipeline <ArrowRight size={11} />
@@ -976,10 +1027,10 @@ export default function RecruiterDashboard() {
                         {report.matches.map((c, i) => (
                           <div
                             key={i}
-                            onClick={() => handleLaunchDatabase(report.query)}
+                            onClick={() => setSelectedDashboardCandidate(c)}
                             style={{
-                              background: 'rgba(15, 23, 42, 0.3)',
-                              border: '1px solid rgba(255, 255, 255, 0.03)',
+                              background: 'rgba(248, 250, 252, 0.6)',
+                              border: '1px solid rgba(15, 23, 42, 0.06)',
                               borderRadius: 8,
                               padding: '8px 12px',
                               display: 'flex',
@@ -989,20 +1040,32 @@ export default function RecruiterDashboard() {
                               transition: 'all 0.15s',
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-                              e.currentTarget.style.background = 'rgba(30, 41, 59, 0.4)';
+                              e.currentTarget.style.borderColor = 'rgba(15, 23, 42, 0.15)';
+                              e.currentTarget.style.background = '#F1F5F9';
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.03)';
-                              e.currentTarget.style.background = 'rgba(15, 23, 42, 0.3)';
+                              e.currentTarget.style.borderColor = 'rgba(15, 23, 42, 0.06)';
+                              e.currentTarget.style.background = 'rgba(248, 250, 252, 0.6)';
                             }}
                           >
                             <div style={{ minWidth: 0, flex: 1 }}>
-                              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#FFF' }}>
+                              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A' }}>
                                 {c["Candidate Name"]}
                               </div>
-                              <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 1 }} className="truncate">
-                                {c["Title"] || "Specialist"} · 📍 {c["Current Location"] || "—"} · 🛂 {c["VISA"] || "—"}
+                              <div style={{ fontSize: 11, color: '#475569', marginTop: 3, display: 'flex', alignItems: 'center', gap: 8 }} className="truncate">
+                                <span>{c["Title"] || "Specialist"}</span>
+                                {c["Current Location"] && (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <MapPin size={10} style={{ color: '#64748B' }} />
+                                    {c["Current Location"]}
+                                  </span>
+                                )}
+                                {c["VISA"] && (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <Shield size={10} style={{ color: '#64748B' }} />
+                                    {c["VISA"]}
+                                  </span>
+                                )}
                               </div>
                             </div>
 
@@ -1010,9 +1073,9 @@ export default function RecruiterDashboard() {
                               style={{
                                 fontSize: 11,
                                 fontWeight: 700,
-                                color: '#FFF',
-                                background: '#1E293B',
-                                border: '1px solid rgba(255, 255, 255, 0.08)',
+                                color: '#334155',
+                                background: '#F1F5F9',
+                                border: '1px solid #E2E8F0',
                                 padding: '2px 8px',
                                 borderRadius: '99px',
                                 flexShrink: 0,
@@ -1036,6 +1099,100 @@ export default function RecruiterDashboard() {
         </AnimatePresence>
 
       </div>
+
+      {/* Dynamic Profile Review Sliding Drawer Panel */}
+      <AnimatePresence>
+        {selectedDashboardCandidate && (
+          <>
+            {/* Backdrop Overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.3 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedDashboardCandidate(null)}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: '#0F172A',
+                zIndex: 1000,
+              }}
+            />
+
+            {/* Sliding Drawer Card */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              style={{
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                width: 620,
+                height: '100vh',
+                background: '#FFFFFF',
+                boxShadow: '-10px 0 40px rgba(15, 23, 42, 0.15)',
+                zIndex: 1001,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                borderLeft: '1px solid #E2E8F0',
+              }}
+            >
+              {/* Drawer Title Header */}
+              <div style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: '#F8FAFC',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Brain size={18} style={{ color: '#0F172A' }} />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>Candidate Profile Review</span>
+                </div>
+                <button
+                  onClick={() => setSelectedDashboardCandidate(null)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#64748B',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 6,
+                    borderRadius: '50%',
+                    width: 28,
+                    height: 28,
+                    transition: 'all 0.1s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#E2E8F0'; e.currentTarget.style.color = '#0F172A'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#64748B'; }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Drawer Content Body container */}
+              <div className="scroll-y" style={{ flex: 1, overflowY: 'auto' }}>
+                <ProfilePanel
+                  candidate={selectedDashboardCandidate}
+                  onFavoriteToggle={handleToggleFavorite}
+                  onCandidateUpdate={handleCandidateUpdate}
+                  query={report?.query || ""}
+                  filters={{}}
+                />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
