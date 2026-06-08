@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import Spinner from '../../components/ui/Spinner.jsx';
+import ExperienceSlider from '../../components/filters/ExperienceSlider.jsx';
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const STYLES = `
@@ -1371,6 +1372,7 @@ function CandidatesPanel({ onViewProfile, onDraftEmail, showToast }) {
   const [statusFilter, setStatusFilter] = useState('All');
   const [visaFilter, setVisaFilter] = useState('All');
   const [workPref, setWorkPref] = useState('All');
+  const [expFilter, setExpFilter] = useState(0);
   const [loading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
 
@@ -1382,30 +1384,16 @@ function CandidatesPanel({ onViewProfile, onDraftEmail, showToast }) {
       const matchStatus = statusFilter === 'All' || c.status === statusFilter;
       const matchVisa = visaFilter === 'All' || c.visa === visaFilter;
       const matchWork = workPref === 'All' || c.workPref === workPref;
-      return matchQ && matchStatus && matchVisa && matchWork;
+      return matchQ && matchStatus && matchVisa && matchWork && (c.experience >= expFilter);
     });
   }, [search, statusFilter, visaFilter, workPref]);
 
-  const activeFilters = [statusFilter, visaFilter, workPref].filter(f => f !== 'All').length + (search ? 1 : 0);
+  const activeFilters = [statusFilter, visaFilter, workPref].filter(f => f !== 'All').length + (search ? 1 : 0) + (expFilter > 0 ? 1 : 0);
 
   return (
     <div className="candidates-panel">
       {/* Filter bar */}
       <div className="candidates-filter-row">
-        <div style={{ position: 'relative', flex: 1, maxWidth: 300 }}>
-          <svg style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} width="15" height="15" fill="none" viewBox="0 0 24 24">
-            <circle cx="11" cy="11" r="7" stroke="#A0A0B8" strokeWidth="2"/>
-            <path stroke="#A0A0B8" strokeWidth="2" strokeLinecap="round" d="m21 21-4.35-4.35"/>
-          </svg>
-          <input
-            className="ez-input"
-            style={{ paddingLeft: 36 }}
-            placeholder="Search candidates, skills, visa…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-
         <select className="ez-select" style={{ width: 140 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="All">All statuses</option>
           {Object.keys(STATUS_COLORS).map(s => <option key={s} value={s}>{s}</option>)}
@@ -1423,6 +1411,7 @@ function CandidatesPanel({ onViewProfile, onDraftEmail, showToast }) {
             </button>
           ))}
         </div>
+        <ExperienceSlider value={expFilter} onChange={setExpFilter} min={0} max={20} step={1} />
 
         {activeFilters > 0 && (
           <button className="btn-ghost sm" onClick={() => { setSearch(''); setStatusFilter('All'); setVisaFilter('All'); setWorkPref('All'); }}>
@@ -1449,8 +1438,8 @@ function CandidatesPanel({ onViewProfile, onDraftEmail, showToast }) {
       {/* Grid */}
       <div className="candidates-grid-area">
         {loading ? (
-          <div className="candidates-grid">
-            {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+            <Spinner size={32} />
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#A0A0B8' }}>
