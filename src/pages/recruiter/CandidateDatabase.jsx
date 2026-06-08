@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Spinner from '../../components/ui/Spinner.jsx';
 import ExperienceSlider from '../../components/filters/ExperienceSlider.jsx';
 
@@ -1386,7 +1387,7 @@ function CandidatesPanel({ onViewProfile, onDraftEmail, showToast }) {
       const matchWork = workPref === 'All' || c.workPref === workPref;
       return matchQ && matchStatus && matchVisa && matchWork && (c.experience >= expFilter);
     });
-  }, [search, statusFilter, visaFilter, workPref]);
+  }, [search, statusFilter, visaFilter, workPref, expFilter]);
 
   const activeFilters = [statusFilter, visaFilter, workPref].filter(f => f !== 'All').length + (search ? 1 : 0) + (expFilter > 0 ? 1 : 0);
 
