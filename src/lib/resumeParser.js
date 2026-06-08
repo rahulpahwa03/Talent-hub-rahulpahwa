@@ -329,9 +329,7 @@ function extractLocation(text) {
 }
 
 function extractVisa(text) {
-  for (const { re, label } of VISAS) {
-    if (re.test(text)) return label;
-  }
+  // Return blank by default as visa is mostly not mentioned on resumes.
   return '';
 }
 

@@ -35,7 +35,7 @@ const DEMO_PARSED = {
   phone: "",
   linkedin: "",
   location: "",
-  visa: "Other",
+  visa: "",
   skills: [],
   experience: "",
   currentEmployer: "",
@@ -546,7 +546,8 @@ function StepReview({ parsedData, onSubmit }) {
                   Visa Status
                   <AiBadge />
                 </label>
-                <select className="input" value={form.visa || "Other"} onChange={set("visa")}>
+                 <select className="input" value={form.visa || ""} onChange={set("visa")}>
+                  <option value="">Select Visa Status</option>
                   {VISA_OPTIONS.map((v) => (
                     <option key={v} value={v}>
                       {v}

@@ -62,6 +62,7 @@ export default function ProfileReview() {
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState(null);
+  const [uploadingResume, setUploadingResume] = useState(false);
 
   // Fetch candidate profile from Supabase
   const fetchProfile = async (targetEmail) => {
@@ -195,6 +196,70 @@ export default function ProfileReview() {
       skills: profile.skills.join(", "),
     });
     setIsEditing(false);
+  };
+
+  const handleResumeUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowed = ["pdf", "doc", "docx"];
+    const ext = file.name.split(".").pop().toLowerCase();
+    if (!allowed.includes(ext)) {
+      toast.error("Invalid file type. Please upload a PDF, DOC, or DOCX document.");
+      return;
+    }
+
+    setUploadingResume(true);
+    const toastId = toast.loading("Uploading resume...");
+
+    try {
+      const slug = (profile.name || "candidate")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      const ts = Date.now();
+      const fileName = `${slug}_${ts}.${ext}`;
+      const path = `uploads/${fileName}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from("resumes")
+        .upload(path, file, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: file.type || "application/octet-stream",
+        });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: urlData } = supabase.storage
+        .from("resumes")
+        .getPublicUrl(path);
+      
+      const newUrl = urlData?.publicUrl || "";
+
+      const { error: dbErr } = await supabase
+        .from("candidates")
+        .update({
+          "resume_url": newUrl,
+          "resume_file_name": file.name,
+          "last_updated": new Date().toISOString(),
+        })
+        .or(`id.eq.${profile.id},candidate_uuid.eq.${profile.id},Email.eq.${profile.email}`);
+
+      if (dbErr) throw dbErr;
+
+      toast.success("Resume updated successfully!", { id: toastId });
+      
+      setProfile(prev => ({
+        ...prev,
+        resume_url: newUrl,
+      }));
+    } catch (err) {
+      console.error("[ProfileReview] Upload error:", err);
+      toast.error(err.message || "Failed to upload resume.", { id: toastId });
+    } finally {
+      setUploadingResume(false);
+    }
   };
 
   const handleLoadSubmittedEmail = (e) => {
@@ -675,19 +740,37 @@ export default function ProfileReview() {
           </motion.div>
 
           {/* Resume Inline Previewer Card */}
-          {profile.resume_url && (
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="card"
-              style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h3 style={{ fontSize: 15, margin: 0, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
-                  <Eye size={16} style={{ color: "var(--accent)" }} /> Resume Preview
-                </h3>
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="card"
+            style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ fontSize: 15, margin: 0, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+                <Eye size={16} style={{ color: "var(--accent)" }} /> Resume Preview
+              </h3>
+              {profile.resume_url && (
                 <div style={{ display: "flex", gap: 8 }}>
+                  <label
+                    className={`btn btn-secondary btn-sm ${uploadingResume ? "disabled" : ""}`}
+                    style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 5, margin: 0 }}
+                  >
+                    {uploadingResume ? (
+                      <Loader2 size={12} className="spin-animate" style={{ animation: "spin 0.8s linear infinite" }} />
+                    ) : (
+                      <UploadCloud size={12} />
+                    )}
+                    Update Resume
+                    <input
+                      type="file"
+                      onChange={handleResumeUpload}
+                      disabled={uploadingResume}
+                      style={{ display: "none" }}
+                      accept=".pdf,.doc,.docx"
+                    />
+                  </label>
                   <a
                     href={profile.resume_url}
                     target="_blank"
@@ -706,8 +789,10 @@ export default function ProfileReview() {
                     <Download size={12} /> Download
                   </a>
                 </div>
-              </div>
+              )}
+            </div>
 
+            {profile.resume_url ? (
               <div
                 style={{
                   height: 700,
@@ -726,8 +811,45 @@ export default function ProfileReview() {
                   allow="autoplay"
                 />
               </div>
-            </motion.div>
-          )}
+            ) : (
+              <div
+                className="dropzone"
+                style={{
+                  padding: "40px 20px",
+                  textAlign: "center",
+                  border: "2px dashed var(--border)",
+                  borderRadius: "var(--radius-lg)",
+                  background: "var(--bg-soft)",
+                }}
+              >
+                <UploadCloud size={32} style={{ color: "var(--text-muted)", marginBottom: 12, margin: "0 auto" }} />
+                <p style={{ fontSize: 14, fontWeight: 600, color: "var(--text-secondary)", margin: "0 0 4px" }}>
+                  No resume on file
+                </p>
+                <p style={{ fontSize: 12.5, color: "var(--text-muted)", margin: "0 0 16px" }}>
+                  Upload your resume to complete your profile and let recruiters discover you.
+                </p>
+                <label
+                  className={`btn btn-primary ${uploadingResume ? "disabled" : ""}`}
+                  style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
+                >
+                  {uploadingResume ? (
+                    <Loader2 size={13} className="spin-animate" style={{ animation: "spin 0.8s linear infinite" }} />
+                  ) : (
+                    <UploadCloud size={13} />
+                  )}
+                  Upload Resume Document
+                  <input
+                    type="file"
+                    onChange={handleResumeUpload}
+                    disabled={uploadingResume}
+                    style={{ display: "none" }}
+                    accept=".pdf,.doc,.docx"
+                  />
+                </label>
+              </div>
+            )}
+          </motion.div>
         </div>
 
         {/* Sidebar Status Column */}

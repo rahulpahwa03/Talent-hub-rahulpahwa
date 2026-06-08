@@ -11,6 +11,7 @@ import { supabase } from '../../lib/supabase';
 import CandidateCard from '../../components/CandidateCard';
 import ProfilePanel from '../../components/ProfilePanel';
 import SearchBar, { parseNaturalQuery, applyBooleanSearch, buildSupabaseQuery } from '../../components/ai/AISearchBar';
+import VirtualRecruiter from '../../components/ai/VirtualRecruiter';
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 const VISA_OPTIONS = [
@@ -684,6 +685,10 @@ export default function CandidateDatabase() {
         </div>
 
       </div>
+      <VirtualRecruiter 
+        candidates={candidates}
+        selectedCandidate={selectedCandidate}
+      />
     </div>
   );
 }
