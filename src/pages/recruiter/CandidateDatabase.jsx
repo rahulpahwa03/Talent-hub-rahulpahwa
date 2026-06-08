@@ -745,17 +745,17 @@ function SkeletonCard() {
 function DraftEmailModal({ candidate, onClose, showToast }) {
   const [to, setTo] = useState(candidate?.email || '');
   const [subject, setSubject] = useState(
-    candidate ? `Submission: ${candidate.name} — ${candidate.role}` : ''
+    candidate ? `Exciting Opportunity: ${candidate.role} Role at EzHire` : ''
   );
   const [body, setBody] = useState(
     candidate
-      ? `Hi [Hiring Manager],\n\nSharing a strong fit for your ${candidate.role} opening.\n\n${candidate.name} brings ${candidate.experience} years in ${Object.values(candidate.skills || {}).flat().slice(0, 3).join(', ')}, ${candidate.visa} status, available ${candidate.availableFrom}. Based in ${candidate.location}, prefers ${candidate.workPref} work.\n\nHappy to set up a call.\n\n— Rahul`
+      ? `Hi ${candidate.name.split(' ')[0]},\n\nI hope this email finds you well.\n\nI came across your profile and was highly impressed by your background as a ${candidate.role} with expertise in ${Object.values(candidate.skills || {}).flat().slice(0, 4).join(', ')}.\n\nWe have an exciting opportunity that matches your skills perfectly. Let me know if you would be open to a brief 10-minute chat this week to discuss details.\n\nLooking forward to hearing from you!\n\nBest regards,\nRahul\nEzHire Recruiting Team`
       : ''
   );
 
   function regenerate() {
-    setBody(`Hi [Name],\n\nI wanted to share ${candidate?.name} for your ${candidate?.role} role — ${candidate?.experience} years of experience, ${candidate?.visa}, open to ${candidate?.workPref}, available ${candidate?.availableFrom}. Strong match.\n\nLet me know if you'd like to connect.\n\n— Rahul`);
-    showToast('Email regenerated', 'info');
+    setBody(`Hi ${candidate?.name.split(' ')[0] || 'there'},\n\nHope you're doing great. I'm reaching out because your experience with ${Object.values(candidate?.skills || {}).flat().slice(0, 3).join(', ')} aligns well with some of our open positions. Are you open to exploring new roles at the moment?\n\nLet's connect!\n\nBest,\nRahul`);
+    showToast('Outreach email regenerated', 'info');
   }
 
   function copyEmail() {
@@ -771,15 +771,15 @@ function DraftEmailModal({ candidate, onClose, showToast }) {
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-box">
         <div className="modal-header">
-          <span className="modal-title">Draft submission email</span>
+          <span className="modal-title">Draft outreach email</span>
           <button className="btn-icon" onClick={onClose} aria-label="Close modal">
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path stroke="#6B6B8A" strokeWidth="2" strokeLinecap="round" d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
 
         <div className="modal-field">
-          <label className="modal-label">To</label>
-          <input className="ez-input" value={to} onChange={e => setTo(e.target.value)} placeholder="Hiring manager email" />
+          <label className="modal-label">Candidate Email</label>
+          <input className="ez-input" value={to} onChange={e => setTo(e.target.value)} placeholder="Candidate email" />
         </div>
         <div className="modal-field">
           <label className="modal-label">Subject</label>
@@ -801,7 +801,7 @@ function DraftEmailModal({ candidate, onClose, showToast }) {
             Regenerate
           </button>
           <button className="btn-outlined" onClick={copyEmail}>Copy</button>
-          <button className="btn-filled" onClick={openGmail}>Open in Gmail</button>
+          <button className="btn-filled" onClick={openGmail}>Send Email</button>
         </div>
       </div>
     </div>
@@ -1464,8 +1464,21 @@ function CandidatesPanel({ candidates, onViewProfile, onDraftEmail, showToast })
   const [visaFilter, setVisaFilter] = useState('All');
   const [workPref, setWorkPref] = useState('All');
   const [expFilter, setExpFilter] = useState(0);
+  const [resumeFilter, setResumeFilter] = useState('All'); // 'All' | 'With' | 'Without'
+  const [linkedinFilter, setLinkedinFilter] = useState('All'); // 'All' | 'With' | 'Without'
+  const [emailFilter, setEmailFilter] = useState('All'); // 'All' | 'With' | 'Without'
+  const [phoneFilter, setPhoneFilter] = useState('All'); // 'All' | 'With' | 'Without'
   const [loading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  // Reset page when any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, visaFilter, workPref, expFilter, resumeFilter, linkedinFilter, emailFilter, phoneFilter]);
 
   const filtered = useMemo(() => {
     return candidates.filter(c => {
@@ -1475,29 +1488,87 @@ function CandidatesPanel({ candidates, onViewProfile, onDraftEmail, showToast })
       const matchStatus = statusFilter === 'All' || c.status === statusFilter;
       const matchVisa = visaFilter === 'All' || c.visa === visaFilter;
       const matchWork = workPref === 'All' || c.workPref === workPref;
-      return matchQ && matchStatus && matchVisa && matchWork && (c.experience >= expFilter);
-    });
-  }, [candidates, search, statusFilter, visaFilter, workPref, expFilter]);
+      const matchExp = c.experience >= expFilter;
 
-  const activeFilters = [statusFilter, visaFilter, workPref].filter(f => f !== 'All').length + (search ? 1 : 0) + (expFilter > 0 ? 1 : 0);
+      // Completeness filters
+      const hasResume = !!(c.resume_url?.trim());
+      const matchResume = resumeFilter === 'All' || (resumeFilter === 'With' ? hasResume : !hasResume);
+
+      const hasLinkedin = !!(c.linkedin?.trim());
+      const matchLinkedin = linkedinFilter === 'All' || (linkedinFilter === 'With' ? hasLinkedin : !hasLinkedin);
+
+      const hasEmail = !!(c.email?.trim());
+      const matchEmail = emailFilter === 'All' || (emailFilter === 'With' ? hasEmail : !hasEmail);
+
+      const hasPhone = !!(c.phone?.trim());
+      const matchPhone = phoneFilter === 'All' || (phoneFilter === 'With' ? hasPhone : !hasPhone);
+
+      return matchQ && matchStatus && matchVisa && matchWork && matchExp && matchResume && matchLinkedin && matchEmail && matchPhone;
+    });
+  }, [candidates, search, statusFilter, visaFilter, workPref, expFilter, resumeFilter, linkedinFilter, emailFilter, phoneFilter]);
+
+  const activeFilters = [statusFilter, visaFilter, workPref, resumeFilter, linkedinFilter, emailFilter, phoneFilter].filter(f => f !== 'All').length + (search ? 1 : 0) + (expFilter > 0 ? 1 : 0);
+
+  // Paginated chunk
+  const paginatedCandidates = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filtered.slice(start, start + itemsPerPage);
+  }, [filtered, currentPage]);
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage) || 1;
 
   return (
     <div className="candidates-panel">
+      {/* Search Bar */}
+      <div style={{ padding: '12px 20px', borderBottom: '1px solid #E8E6F0', background: '#fff' }}>
+        <input
+          className="ez-input"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search candidates, skills, location..."
+        />
+      </div>
+
       {/* Filter bar */}
-      <div className="candidates-filter-row">
-        <select className="ez-select" style={{ width: 140 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-          <option value="All">All statuses</option>
+      <div className="candidates-filter-row" style={{ flexWrap: 'wrap', gap: '8px', padding: '12px 20px' }}>
+        <select className="ez-select" style={{ width: 130 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <option value="All">All Statuses</option>
           {Object.keys(STATUS_COLORS).map(s => <option key={s} value={s}>{s}</option>)}
         </select>
 
-        <select className="ez-select" style={{ width: 130 }} value={visaFilter} onChange={e => setVisaFilter(e.target.value)}>
-          <option value="All">All visas</option>
+        <select className="ez-select" style={{ width: 110 }} value={visaFilter} onChange={e => setVisaFilter(e.target.value)}>
+          <option value="All">All Visas</option>
           {['USC', 'GC', 'H1B', 'TN', 'H4 EAD', 'OPT'].map(v => <option key={v} value={v}>{v}</option>)}
         </select>
 
-        <div style={{ display: 'flex', gap: 6 }}>
+        {/* Completeness Dropdowns */}
+        <select className="ez-select" style={{ width: 130 }} value={resumeFilter} onChange={e => setResumeFilter(e.target.value)}>
+          <option value="All">Resumes: All</option>
+          <option value="With">With Resume</option>
+          <option value="Without">No Resume</option>
+        </select>
+
+        <select className="ez-select" style={{ width: 130 }} value={linkedinFilter} onChange={e => setLinkedinFilter(e.target.value)}>
+          <option value="All">LinkedIn: All</option>
+          <option value="With">With LinkedIn</option>
+          <option value="Without">No LinkedIn</option>
+        </select>
+
+        <select className="ez-select" style={{ width: 120 }} value={emailFilter} onChange={e => setEmailFilter(e.target.value)}>
+          <option value="All">Email: All</option>
+          <option value="With">With Email</option>
+          <option value="Without">No Email</option>
+        </select>
+
+        <select className="ez-select" style={{ width: 120 }} value={phoneFilter} onChange={e => setPhoneFilter(e.target.value)}>
+          <option value="All">Phone: All</option>
+          <option value="With">With Phone</option>
+          <option value="Without">No Phone</option>
+        </select>
+
+        <div style={{ display: 'flex', gap: 4 }}>
           {['All', 'Remote', 'Hybrid', 'Onsite'].map(p => (
-            <button key={p} className={`toggle-pill${workPref === p ? ' active' : ''}`} onClick={() => setWorkPref(p)}>
+            <button key={p} className={`toggle-pill${workPref === p ? ' active' : ''}`} onClick={() => setWorkPref(p)} style={{ padding: '6px 12px', fontSize: '11.5px' }}>
               {p}
             </button>
           ))}
@@ -1505,7 +1576,11 @@ function CandidatesPanel({ candidates, onViewProfile, onDraftEmail, showToast })
         <ExperienceSlider value={expFilter} onChange={setExpFilter} min={0} max={20} step={1} />
 
         {activeFilters > 0 && (
-          <button className="btn-ghost sm" onClick={() => { setSearch(''); setStatusFilter('All'); setVisaFilter('All'); setWorkPref('All'); }}>
+          <button className="btn-ghost sm" onClick={() => {
+            setSearch(''); setStatusFilter('All'); setVisaFilter('All'); setWorkPref('All');
+            setResumeFilter('All'); setLinkedinFilter('All'); setEmailFilter('All'); setPhoneFilter('All');
+            setExpFilter(0);
+          }}>
             Clear {activeFilters > 0 && <span className="active-filter-badge">{activeFilters}</span>}
           </button>
         )}
@@ -1514,7 +1589,9 @@ function CandidatesPanel({ candidates, onViewProfile, onDraftEmail, showToast })
       {/* Count bar */}
       <div style={{ padding: '10px 20px', borderBottom: '1px solid #E8E6F0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 13, color: '#6B6B8A' }}>
-          <span style={{ fontWeight: 600, color: '#1A1A2E' }}>{filtered.length}</span> candidates
+          Showing <span style={{ fontWeight: 600, color: '#1A1A2E' }}>
+            {filtered.length > 0 ? `${(currentPage - 1) * itemsPerPage + 1} - ${Math.min(currentPage * itemsPerPage, filtered.length)} of ${filtered.length}` : '0'}
+          </span> candidates
           {activeFilters > 0 && <span style={{ color: '#6C5CE7', marginLeft: 4 }}>· filtered</span>}
         </span>
         <button className="btn-ghost sm" onClick={() => {
@@ -1532,31 +1609,55 @@ function CandidatesPanel({ candidates, onViewProfile, onDraftEmail, showToast })
           <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
             <Spinner size={32} />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : paginatedCandidates.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#A0A0B8' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
             <div style={{ fontSize: 16, fontWeight: 500, color: '#6B6B8A', marginBottom: 6 }}>No candidates found</div>
             <div style={{ fontSize: 13 }}>Try adjusting your filters or search query</div>
           </div>
         ) : (
-          <div className="candidates-grid">
-            {filtered.map(c => (
-              <CandidateGridCard
-                key={c.id}
-                candidate={c}
-                selected={selectedId === c.id}
-                onClick={() => { setSelectedId(c.id); onViewProfile(c); }}
-                onDraftEmail={onDraftEmail}
-              />
-            ))}
-          </div>
+          <>
+            <div className="candidates-grid">
+              {paginatedCandidates.map(c => (
+                <CandidateGridCard
+                  key={c.id}
+                  candidate={c}
+                  selected={selectedId === c.id}
+                  onClick={() => { setSelectedId(c.id); onViewProfile(c); }}
+                  onDraftEmail={onDraftEmail}
+                />
+              ))}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 24, paddingBottom: 12 }}>
+                <button
+                  className="btn-outlined sm"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                >
+                  Previous
+                </button>
+                <span style={{ fontSize: 13, color: '#6B6B8A' }}>
+                  Page <b>{currentPage}</b> of {totalPages}
+                </span>
+                <button
+                  className="btn-outlined sm"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
   );
 }
 
-// ─── ROOT COMPONENT ───────────────────────────────────────────────────────────
 // ─── ROOT COMPONENT ───────────────────────────────────────────────────────────
 export default function CandidateDatabase() {
   const navigate = useNavigate();
