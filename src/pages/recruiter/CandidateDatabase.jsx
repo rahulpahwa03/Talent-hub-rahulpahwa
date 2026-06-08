@@ -50,6 +50,43 @@ function getAvatarStyle(candidateId) {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
+function renderMarkdown(text) {
+  if (!text) return null;
+  const lines = text.split("\n");
+  
+  return lines.map((line, lineIdx) => {
+    const trimmed = line.trim();
+    
+    // Check if it's a bullet point
+    const isBullet = trimmed.startsWith("•") || trimmed.startsWith("-");
+    const cleanLine = isBullet ? trimmed.replace(/^[•-]\s*/, "") : line;
+    
+    // Parse bold tags **bold** within the line
+    const parts = cleanLine.split(/\*\*([^*]+)\*\*/g);
+    const content = parts.map((part, partIdx) => {
+      if (partIdx % 2 === 1) {
+        return <strong key={partIdx} className="font-bold text-[#1A1A2E]">{part}</strong>;
+      }
+      return part;
+    });
+
+    if (isBullet) {
+      return (
+        <div key={lineIdx} className="flex gap-2 pl-3 my-1 items-start">
+          <span className="text-[#6C5CE7] mt-1.5 flex-shrink-0" style={{ width: 4, height: 4, borderRadius: '50%', background: '#6C5CE7' }} />
+          <span className="flex-1">{content}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div key={lineIdx} className="min-h-[20px]">
+        {content}
+      </div>
+    );
+  });
+}
+
 // ─── Mock Candidate Seed Data ────────────────────────────────
 const INITIAL_CANDIDATES = [
   {
@@ -462,6 +499,21 @@ ${candidate.notes || ""}
       body: email.body
     }));
     toast.success("New draft generated!");
+  };
+
+  const handleUpdateInlineEmailDraft = (msgIdx, field, value) => {
+    setEzraMessages(prev => prev.map((msg, idx) => {
+      if (idx === msgIdx && msg.emailDraft) {
+        return {
+          ...msg,
+          emailDraft: {
+            ...msg.emailDraft,
+            [field]: value
+          }
+        };
+      }
+      return msg;
+    }));
   };
 
   const handleRegenerateAISummary = (candidateId) => {
@@ -1052,7 +1104,10 @@ ${candidate.notes || ""}
                             border: msg.sender === 'ezra' ? '1px solid #C4BFEA/20' : 'none'
                           }}
                         >
-                          <p className="m-0 whitespace-pre-wrap">{msg.text}</p>
+                          <div className="m-0 whitespace-pre-wrap text-[14px] leading-[1.6]">
+                            {renderMarkdown(msg.text)}
+                          </div>
+
 
                           {/* Inline matches rendering */}
                           {msg.matches && msg.matches.length > 0 && (
@@ -1110,34 +1165,34 @@ ${candidate.notes || ""}
                             </div>
                           )}
 
-                          {/* Inline email draft rendering */}
+                           {/* Inline email draft rendering */}
                           {msg.emailDraft && (
-                            <div className="mt-3 p-3 bg-white border border-[#E8E6F0] rounded-xl text-left text-[12.5px] text-[#1A1A2E]">
+                            <div className="mt-3 p-3 bg-white border border-[#E8E6F0] rounded-xl text-left text-[12px] text-[#1A1A2E] shadow-sm">
                               <div className="mb-2">
-                                <span className="font-semibold text-[#6B6B8A] text-[10px] uppercase block">To:</span>
+                                <span className="font-semibold text-[#6B6B8A] text-[9.5px] uppercase block mb-0.5">To:</span>
                                 <input
                                   type="text"
-                                  className="w-full bg-transparent border-none outline-none font-semibold text-[12.5px] p-0"
+                                  className="w-full bg-transparent border-none outline-none font-semibold text-[12.5px] p-0 focus:ring-0 focus:outline-none"
                                   value={msg.emailDraft.to}
-                                  readOnly
+                                  onChange={(e) => handleUpdateInlineEmailDraft(idx, 'to', e.target.value)}
                                 />
                               </div>
                               <div className="mb-2 border-t border-[#F7F6FB] pt-2">
-                                <span className="font-semibold text-[#6B6B8A] text-[10px] uppercase block">Subject:</span>
+                                <span className="font-semibold text-[#6B6B8A] text-[9.5px] uppercase block mb-0.5">Subject:</span>
                                 <input
                                   type="text"
-                                  className="w-full bg-transparent border-none outline-none font-semibold text-[12.5px] p-0"
+                                  className="w-full bg-transparent border-none outline-none font-semibold text-[12.5px] p-0 focus:ring-0 focus:outline-none"
                                   value={msg.emailDraft.subject}
-                                  readOnly
+                                  onChange={(e) => handleUpdateInlineEmailDraft(idx, 'subject', e.target.value)}
                                 />
                               </div>
                               <div className="border-t border-[#F7F6FB] pt-2">
-                                <span className="font-semibold text-[#6B6B8A] text-[10px] uppercase block">Body:</span>
+                                <span className="font-semibold text-[#6B6B8A] text-[9.5px] uppercase block mb-0.5">Body:</span>
                                 <textarea
                                   rows={5}
-                                  className="w-full bg-transparent border-none outline-none text-[12.5px] leading-relaxed p-0 resize-none font-sans"
+                                  className="w-full bg-transparent border-none outline-none text-[12.5px] leading-relaxed p-0 resize-none font-sans focus:ring-0 focus:outline-none"
                                   value={msg.emailDraft.body}
-                                  readOnly
+                                  onChange={(e) => handleUpdateInlineEmailDraft(idx, 'body', e.target.value)}
                                 />
                               </div>
                               <div className="flex justify-end gap-3 border-t border-[#F7F6FB] pt-2 mt-2">
