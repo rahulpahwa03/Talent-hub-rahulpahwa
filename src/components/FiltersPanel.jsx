@@ -1,120 +1,118 @@
-export default function FiltersPanel({
-  filters,
-  setFilters,
-}) {
+import { SlidersHorizontal, RotateCcw } from "lucide-react";
+
+const VISA_OPTIONS = [
+  { value: "",          label: "All Visa Types" },
+  { value: "US Citizen", label: "🇺🇸 US Citizen" },
+  { value: "Green Card", label: "💚 Green Card" },
+  { value: "H1B",        label: "🔵 H1B" },
+  { value: "H4 EAD",    label: "H4 EAD" },
+  { value: "OPT",        label: "OPT" },
+  { value: "OPT EAD",   label: "OPT EAD" },
+  { value: "L2S",        label: "L2S" },
+];
+
+export default function FiltersPanel({ filters, setFilters }) {
+  const hasActive = filters.visa || filters.location ||
+    filters.hasLinkedIn || filters.hasEmail || filters.hasResume;
+
+  const reset = () => setFilters({
+    visa: "", location: "",
+    hasLinkedIn: false, hasEmail: false, hasResume: false,
+  });
+
   return (
-    <div className="h-full bg-slate-950 border-r border-cyan-500/10 p-5">
+    <div style={{
+      height: "100%",
+      display: "flex",
+      flexDirection: "column",
+      padding: "16px 14px",
+      gap: 20,
+      overflowY: "auto",
+    }}>
 
-      <h2 className="text-xl font-bold text-cyan-300 mb-6">
-        Filters
-      </h2>
-      <label className="flex items-center gap-3 cursor-pointer">
-
-  <input
-    type="checkbox"
-    checked={filters.hasResume}
-    onChange={(e) =>
-      setFilters({
-        ...filters,
-        hasResume: e.target.checked,
-      })
-    }
-  />
-
-  <span className="text-sm">
-    Has Resume
-  </span>
-
-</label>
-
-      <div className="space-y-5">
-
-        {/* VISA */}
-
-        <div>
-          <label className="text-sm text-slate-400">
-            Visa
-          </label>
-
-          <select
-            value={filters.visa}
-            onChange={(e) =>
-              setFilters({
-                ...filters,
-                visa: e.target.value,
-              })
-            }
-            className="mt-2 w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 7,
+          fontSize: 12, fontWeight: 700,
+          textTransform: "uppercase", letterSpacing: "0.1em",
+          color: "var(--text-secondary)",
+        }}>
+          <SlidersHorizontal size={13} style={{ color: "#8b5cf6" }} />
+          Filters
+        </div>
+        {hasActive && (
+          <button
+            onClick={reset}
+            style={{
+              display: "flex", alignItems: "center", gap: 4,
+              background: "none", border: "none", cursor: "pointer",
+              fontSize: 11, color: "var(--text-muted)",
+              transition: "color 0.2s",
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = "#f43f5e"}
+            onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
           >
-            <option value="">All</option>
-            <option value="US Citizen">US Citizen</option>
-            <option value="Green Card">Green Card</option>
-            <option value="H1B">H1B</option>
-            <option value="H4 EAD">H4 EAD</option>
-            <option value="OPT">OPT</option>
-            <option value="OPT EAD">OPT EAD</option>
-            <option value="L2S">L2S</option>
-          </select>
-        </div>
+            <RotateCcw size={11} />
+            Reset
+          </button>
+        )}
+      </div>
 
-        {/* LOCATION */}
+      {/* Divider */}
+      <div className="divider" style={{ margin: "0 -14px" }} />
 
-        <div>
-          <label className="text-sm text-slate-400">
-            Location
+      {/* Visa */}
+      <div>
+        <label className="filter-label">Visa Status</label>
+        <select
+          value={filters.visa}
+          onChange={e => setFilters({ ...filters, visa: e.target.value })}
+          className="input-base"
+          style={{ fontSize: 12.5 }}
+        >
+          {VISA_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Location */}
+      <div>
+        <label className="filter-label">Location</label>
+        <input
+          value={filters.location}
+          onChange={e => setFilters({ ...filters, location: e.target.value })}
+          placeholder="e.g. TX, CA, New York…"
+          className="input-base"
+          style={{ fontSize: 12.5 }}
+        />
+      </div>
+
+      {/* Divider */}
+      <div className="divider" style={{ margin: "0 -14px" }} />
+
+      {/* Checkboxes */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <label className="filter-label" style={{ marginBottom: 6 }}>Has Data</label>
+
+        {[
+          { key: "hasEmail",    label: "Has Email",    icon: "✉️" },
+          { key: "hasLinkedIn", label: "Has LinkedIn", icon: "🔗" },
+          { key: "hasResume",   label: "Has Resume",   icon: "📄" },
+        ].map(item => (
+          <label key={item.key} className="checkbox-row" style={{ cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={filters[item.key]}
+              onChange={e => setFilters({ ...filters, [item.key]: e.target.checked })}
+            />
+            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
+              <span>{item.icon}</span>
+              {item.label}
+            </span>
           </label>
-
-          <input
-            value={filters.location}
-            onChange={(e) =>
-              setFilters({
-                ...filters,
-                location: e.target.value,
-              })
-            }
-            placeholder="TX, CA, NJ..."
-            className="mt-2 w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-white"
-          />
-        </div>
-
-        {/* LINKEDIN */}
-
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={filters.hasLinkedIn}
-            onChange={(e) =>
-              setFilters({
-                ...filters,
-                hasLinkedIn: e.target.checked,
-              })
-            }
-          />
-
-          <span className="text-sm">
-            Has LinkedIn
-          </span>
-        </label>
-
-        {/* EMAIL */}
-
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={filters.hasEmail}
-            onChange={(e) =>
-              setFilters({
-                ...filters,
-                hasEmail: e.target.checked,
-              })
-            }
-          />
-
-          <span className="text-sm">
-            Has Email
-          </span>
-        </label>
-
+        ))}
       </div>
 
     </div>
