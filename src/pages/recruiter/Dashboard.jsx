@@ -19,7 +19,7 @@ import {
   AlertCircle,
   X
 } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { applyBooleanSearch } from '../../components/ai/AISearchBar';
 import { calculateMatchScore } from '../../components/candidates/CandidateCard';
