@@ -1496,7 +1496,14 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 3v18M3 12h18" stroke="#6C5CE7" strokeWidth="2.5" strokeLinecap="round"/></svg>
                   Ezra AI Summary
                 </div>
-                <div className="summary-quote">{candidate.summary}</div>
+                <div className="summary-quote">
+                  {(() => {
+                    const skillsList = Object.values(candidate.skills || {}).flat();
+                    const topSkills = skillsList.slice(0, 4).join(', ');
+                    const firstName = candidate.name.split(' ')[0];
+                    return `${candidate.name} is a highly accomplished ${candidate.role} with ${candidate.experience} years of professional experience. Currently located in ${candidate.location} and open to ${candidate.workPref} roles under ${candidate.visa} status, ${firstName} has demonstrated hands-on expertise in ${topSkills}. Strong fit for modern engineering and architectural roles requiring ${skillsList.slice(0, 3).join(', ')}.`;
+                  })()}
+                </div>
               </div>
 
               {/* Skills */}
@@ -1515,25 +1522,6 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
                     </div>
                   );
                 })}
-              </div>
-
-              {/* Work History */}
-              <div className="detail-card-sm">
-                <div className="detail-section-label">Experience</div>
-                {(candidate.history || []).map((entry, i) => (
-                  <div key={i} className="timeline-entry">
-                    <div className="timeline-left">
-                      <div className="timeline-dot" />
-                      <div className="timeline-line" />
-                    </div>
-                    <div style={{ paddingBottom: 4 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E' }}>{entry.company}</div>
-                      <div style={{ fontSize: 13, color: '#6B6B8A', marginTop: 1 }}>{entry.role}</div>
-                      <div style={{ fontSize: 12, color: '#A0A0B8', marginTop: 2 }}>{entry.dates}</div>
-                      <div style={{ fontSize: 13, color: '#6B6B8A', marginTop: 6, lineHeight: 1.6 }}>{entry.desc}</div>
-                    </div>
-                  </div>
-                ))}
               </div>
             </>
           ) : (
