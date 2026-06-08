@@ -936,20 +936,33 @@ function EzraPanel({ candidates, isOpen, onClose, onViewProfile, onDraftEmail, s
     }
 
     try {
-      const systemPrompt = `You are Ezra, an AI recruiting assistant for EzHire. You help recruiters find candidates from their database.
+      const systemPrompt = `You are Ezra, an AI recruiting assistant for EzHire. You help recruiters navigate and manage their candidate database.
 
 Here is the current candidate database:
 ${candidateContext}
 
-RULES:
-1. When the user asks about candidates, search through the database above and return relevant matches.
-2. Always be specific — mention candidate names, skills, visa status, location, and experience.
-3. If you find matching candidates, include their IDs in a JSON block at the END of your response like this: <!-- CARDS:["cand-1","cand-3"] -->
-4. If the user asks to draft an email for a specific candidate, add <!-- ACTION:draftEmail:cand-X --> at the end.
-5. Keep responses concise but helpful (2-4 sentences max).
-6. If no candidates match, say so and suggest broadening the search.
-7. You can answer general recruiting questions too.
-8. Never make up candidates that aren't in the database.`;
+AVAILABLE FILTERS ON UI:
+- statusFilter: "All", "Available Now", "Interview", "Offer", "Rejected", "Not Available"
+- visaFilter: "All", "USC", "GC", "H1B", "TN", "H4 EAD", "OPT"
+- workPref: "All", "Remote", "Hybrid", "Onsite"
+- expFilter: Number (minimum years of experience)
+- resumeFilter: "All", "With", "Without" (checks if they have a resume)
+- linkedinFilter: "All", "With", "Without" (checks if they have LinkedIn)
+- emailFilter: "All", "With", "Without" (checks if they have email)
+- phoneFilter: "All", "With", "Without" (checks if they have phone number)
+
+RULES & ACTIONS YOU CAN INITIATE:
+1. Search & Filter: If the user wants to filter, search, or find specific criteria, include a JSON block at the end like:
+   <!-- APPLY_FILTERS:{"search":"optional query","visaFilter":"GC","resumeFilter":"With"} -->
+   Only specify the keys that need updating.
+2. Select Candidate: If the user asks for details about a candidate, select them on the screen by adding:
+   <!-- ACTION:selectCandidate:cand-X -->
+3. Draft Outreach Email: If the user asks to email or contact a candidate, add:
+   <!-- ACTION:draftEmail:cand-X -->
+4. Include card previews for matching candidates:
+   <!-- CARDS:["cand-1","cand-3"] -->
+5. Responses should be helpful and concise (2-3 sentences).
+6. Never make up candidate IDs or info not present in the database above.`;
 
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -970,7 +983,7 @@ RULES:
             { role: 'user', content: userText },
           ],
           max_tokens: 400,
-          temperature: 0.4,
+          temperature: 0.3,
         }),
       });
 
@@ -989,17 +1002,29 @@ RULES:
         try { cards = JSON.parse(cardsMatch[1]); } catch(e) {}
       }
 
-      // Extract action from <!-- ACTION:draftEmail:cand-X -->
+      // Extract action
       let action = null;
-      const actionMatch = content.match(/<!--\s*ACTION:draftEmail:(cand-\d+)\s*-->/);
+      const actionMatch = content.match(/<!--\s*ACTION:(\w+):([\w\-]+)\s*-->/);
       if (actionMatch) {
-        action = 'draftEmail:' + actionMatch[1];
+        action = `${actionMatch[1]}:${actionMatch[2]}`;
+      }
+
+      // Extract filters
+      let applyFilters = null;
+      const filterMatch = content.match(/<!--\s*APPLY_FILTERS:\s*(\{.*?\})\s*-->/);
+      if (filterMatch) {
+        try { applyFilters = JSON.parse(filterMatch[1]); } catch(e) {}
       }
 
       // Clean the visible text (remove HTML comments)
       const cleanText = content.replace(/<!--.*?-->/g, '').trim();
 
-      return { text: cleanText || "I couldn't process that. Try asking about specific skills, locations, or visa types.", cards, action };
+      return {
+        text: cleanText || "I've searched your database but found no exact match. Try adjusting your query.",
+        cards,
+        action,
+        applyFilters
+      };
     } catch (err) {
       console.error('Ezra AI error:', err);
       return getEzraResponseFallback(userText);
@@ -1013,37 +1038,34 @@ RULES:
       return {
         text: 'Found 3 Java developers available right now. All open to remote or hybrid work.',
         cards: ['cand-2', 'cand-5', 'cand-1'],
+        applyFilters: { search: 'Java', statusFilter: 'Available Now' }
       };
     }
     if (t.includes('suresh')) {
       return {
-        text: "Suresh is a strong fit for mid-to-senior cloud roles. 11 years on Azure and AWS, GC holder, based in Austin. Last project was a microservices migration for a fintech client. Available immediately, prefers remote.",
-        cards: null,
+        text: "Suresh Balakrishnan is a senior Cloud/Azure architect with 11 years experience, located in Austin, TX. I've highlighted his profile for you.",
+        cards: ['cand-1'],
+        action: 'selectCandidate:cand-1'
       };
     }
     if (t.includes('h1b') || t.includes('texas') || t.includes('tx')) {
       return {
-        text: 'Found 2 H1B candidates in Texas — Mohini in Dallas and Maheshwari in Chicago (open to Texas relocation).',
-        cards: ['cand-2', 'cand-4'],
+        text: 'Found H1B candidates in Texas. I have updated the filters to show H1B and Texas for you.',
+        cards: ['cand-2'],
+        applyFilters: { visaFilter: 'H1B', search: 'Texas' }
       };
     }
-    if (t.includes('bench') || t.includes('longest')) {
+    if (t.includes('resume') && (t.includes('no') || t.includes('without'))) {
       return {
-        text: 'Based on last updated dates, Ashok Marakani has been on the bench longest — last updated 1 week ago, available from Oct 2025.',
-        cards: ['cand-6'],
+        text: 'Filtering the grid to show candidates without a resume on file.',
+        applyFilters: { resumeFilter: 'Without' }
       };
     }
-    if (t.includes('draft') || t.includes('email') || t.includes('submission')) {
+    if (t.includes('draft') || t.includes('email') || t.includes('submission') || t.includes('outreach')) {
       return {
-        text: "Opening draft email for Suresh Balakrishnan now. You can customize the subject, recipients, and body before sending.",
+        text: "Opening outreach email composer now.",
         cards: null,
         action: 'draftEmail:cand-1',
-      };
-    }
-    if (t.includes('cloud') || t.includes('azure') || t.includes('aws')) {
-      return {
-        text: 'Found 2 cloud/Azure architects available or soon available.',
-        cards: ['cand-1', 'cand-6'],
       };
     }
     return {
@@ -1066,12 +1088,29 @@ RULES:
       const ezraMsg = { id: `e${Date.now()}`, role: 'ezra', text: resp.text, time: now(), cards: resp.cards || null };
       setMessages(p => [...p, ezraMsg]);
 
-      // Handle draft email action (format: "draftEmail:cand-X")
-      if (resp.action && resp.action.startsWith('draftEmail:')) {
-        const candId = resp.action.split(':')[1];
-        const candidate = candidates.find(c => c.id === candId);
-        if (candidate) setTimeout(() => onDraftEmail(candidate), 300);
+      // Handle filters application
+      if (resp.applyFilters && typeof onViewProfile === 'function') {
+        // We'll bubble this filter change up through a prop handler
+        if (showToast) showToast('AI updated grid filters!', 'info');
       }
+
+      // Handle actions bubbled up
+      if (resp.action) {
+        const [actionType, targetId] = resp.action.split(':');
+        const candidate = candidates.find(c => c.id === targetId);
+        
+        if (actionType === 'draftEmail' && candidate) {
+          setTimeout(() => onDraftEmail(candidate), 300);
+        } else if (actionType === 'selectCandidate' && candidate) {
+          setTimeout(() => onViewProfile(candidate), 300);
+        }
+      }
+
+      // Bubble up filters to parent if callback exists
+      if (resp.applyFilters && window.__applyEzraFilters) {
+        window.__applyEzraFilters(resp.applyFilters);
+      }
+
       inputRef.current?.focus();
     } catch (err) {
       setTyping(false);
@@ -1458,16 +1497,21 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
 }
 
 // ─── FILTER + GRID PANEL ──────────────────────────────────────────────────────
-function CandidatesPanel({ candidates, onViewProfile, onDraftEmail, showToast }) {
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [visaFilter, setVisaFilter] = useState('All');
-  const [workPref, setWorkPref] = useState('All');
-  const [expFilter, setExpFilter] = useState(0);
-  const [resumeFilter, setResumeFilter] = useState('All'); // 'All' | 'With' | 'Without'
-  const [linkedinFilter, setLinkedinFilter] = useState('All'); // 'All' | 'With' | 'Without'
-  const [emailFilter, setEmailFilter] = useState('All'); // 'All' | 'With' | 'Without'
-  const [phoneFilter, setPhoneFilter] = useState('All'); // 'All' | 'With' | 'Without'
+function CandidatesPanel({
+  candidates,
+  onViewProfile,
+  onDraftEmail,
+  showToast,
+  search, setSearch,
+  statusFilter, setStatusFilter,
+  visaFilter, setVisaFilter,
+  workPref, setWorkPref,
+  expFilter, setExpFilter,
+  resumeFilter, setResumeFilter,
+  linkedinFilter, setLinkedinFilter,
+  emailFilter, setEmailFilter,
+  phoneFilter, setPhoneFilter
+}) {
   const [loading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
 
@@ -1667,6 +1711,35 @@ export default function CandidateDatabase() {
   const [draftTarget, setDraftTarget] = useState(null);
   const { toasts, showToast } = useToast();
   
+  // Lifted filter states
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [visaFilter, setVisaFilter] = useState('All');
+  const [workPref, setWorkPref] = useState('All');
+  const [expFilter, setExpFilter] = useState(0);
+  const [resumeFilter, setResumeFilter] = useState('All');
+  const [linkedinFilter, setLinkedinFilter] = useState('All');
+  const [emailFilter, setEmailFilter] = useState('All');
+  const [phoneFilter, setPhoneFilter] = useState('All');
+
+  // Register window handler for Ezra AI to dynamically update filters
+  useEffect(() => {
+    window.__applyEzraFilters = (newFilters) => {
+      if (typeof newFilters.search === 'string') setSearch(newFilters.search);
+      if (typeof newFilters.statusFilter === 'string') setStatusFilter(newFilters.statusFilter);
+      if (typeof newFilters.visaFilter === 'string') setVisaFilter(newFilters.visaFilter);
+      if (typeof newFilters.workPref === 'string') setWorkPref(newFilters.workPref);
+      if (typeof newFilters.expFilter === 'number') setExpFilter(newFilters.expFilter);
+      if (typeof newFilters.resumeFilter === 'string') setResumeFilter(newFilters.resumeFilter);
+      if (typeof newFilters.linkedinFilter === 'string') setLinkedinFilter(newFilters.linkedinFilter);
+      if (typeof newFilters.emailFilter === 'string') setEmailFilter(newFilters.emailFilter);
+      if (typeof newFilters.phoneFilter === 'string') setPhoneFilter(newFilters.phoneFilter);
+    };
+    return () => {
+      delete window.__applyEzraFilters;
+    };
+  }, []);
+
   // Seed with mock data initially so nothing is empty on load
   const [candidatesList, setCandidatesList] = useState(CANDIDATES);
 
@@ -1783,6 +1856,24 @@ export default function CandidateDatabase() {
             onViewProfile={viewProfile}
             onDraftEmail={openDraftEmail}
             showToast={showToast}
+            search={search}
+            setSearch={setSearch}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            visaFilter={visaFilter}
+            setVisaFilter={setVisaFilter}
+            workPref={workPref}
+            setWorkPref={setWorkPref}
+            expFilter={expFilter}
+            setExpFilter={setExpFilter}
+            resumeFilter={resumeFilter}
+            setResumeFilter={setResumeFilter}
+            linkedinFilter={linkedinFilter}
+            setLinkedinFilter={setLinkedinFilter}
+            emailFilter={emailFilter}
+            setEmailFilter={setEmailFilter}
+            phoneFilter={phoneFilter}
+            setPhoneFilter={setPhoneFilter}
           />
         ) : (
           <DetailPage
