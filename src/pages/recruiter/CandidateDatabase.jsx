@@ -958,7 +958,7 @@ RULES:
           'X-Title': 'EzHire Recruiter Platform',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.0-flash-001',
+          model: 'openrouter/free',
           messages: [
             { role: 'system', content: systemPrompt },
             ...messages.filter(m => m.role === 'user' || m.role === 'ezra').slice(-6).map(m => ({
