@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Heart } from "lucide-react";
+import { Heart, Sparkles, Check } from "lucide-react";
+import { parseNaturalQuery } from "../ai/AISearchBar";
 
 /* ─── Avatar gradient palette (pick by charCode mod 5) ───── */
 const AVATAR_COLORS = [
@@ -25,7 +26,145 @@ function getInitials(name = "") {
     .toUpperCase();
 }
 
-export default function CandidateCard({ candidate, selected, onClick, onFavoriteToggle }) {
+/* ─── Match Score / Profile Strength Calculator ─────────── */
+export function calculateMatchScore(candidate, query = "", filters = {}) {
+  const hasSkills = candidate["Skills"] ? true : false;
+  const hasResume = !!(
+    candidate["resume_url"]?.trim() ||
+    candidate["Resume URL"]?.trim() ||
+    candidate["Resume"]?.trim()
+  );
+  const hasLinkedIn = !!(candidate["LinkedIn"]?.trim() || candidate["linkedin"]?.trim());
+  const hasEmail = !!candidate["Email"]?.trim();
+  const hasPhone = !!candidate["Contact No"]?.trim();
+  const hasLocation = !!candidate["Current Location"]?.trim();
+  const hasVisa = !!candidate["VISA"]?.trim();
+
+  // Check if we have active search queries or filters
+  const hasActiveSkillsFilter = filters.skills && filters.skills.length > 0;
+  const hasActiveVisaFilter = !!filters.visa;
+  const hasActiveLocationFilter = !!filters.location;
+
+  let hasActiveQuery = false;
+  let parsedQuery = { skills: [], visa: "", location: "" };
+  if (query && query.trim()) {
+    hasActiveQuery = true;
+    parsedQuery = parseNaturalQuery(query);
+  }
+
+  const hasAnyActiveCriteria =
+    hasActiveSkillsFilter ||
+    hasActiveVisaFilter ||
+    hasActiveLocationFilter ||
+    (hasActiveQuery && (parsedQuery.skills.length > 0 || parsedQuery.visa || parsedQuery.location));
+
+  // Case A: Idle (No search query/filters active) -> Calculate Profile Strength
+  if (!hasAnyActiveCriteria) {
+    let strength = 30; // base score
+    const details = [];
+    if (hasResume) { strength += 20; details.push("Resume uploaded"); }
+    if (hasLinkedIn) { strength += 15; details.push("LinkedIn linked"); }
+    if (hasEmail) { strength += 15; details.push("Email provided"); }
+    if (hasPhone) { strength += 10; details.push("Phone number provided"); }
+    if (hasSkills) { strength += 10; details.push("Skills listed"); }
+    return {
+      score: strength,
+      isProfileStrength: true,
+      details,
+      reasons: ["Complete contact details", "Ready for recruitment"]
+    };
+  }
+
+  // Case B: Active matching (Search query or filters are applied)
+  const candSkills = (candidate["Skills"] || "").toLowerCase();
+  const candLocation = (candidate["Current Location"] || "").toLowerCase();
+  const candVisa = (candidate["VISA"] || "").toLowerCase();
+
+  // Combine query and filter requirements
+  let reqSkills = [...(filters.skills || [])];
+  if (parsedQuery.skills) {
+    parsedQuery.skills.forEach(s => {
+      if (!reqSkills.some(rs => rs.toLowerCase() === s.toLowerCase())) {
+        reqSkills.push(s);
+      }
+    });
+  }
+  
+  let reqVisa = filters.visa || parsedQuery.visa || "";
+  let reqLocation = filters.location || parsedQuery.location || "";
+
+  reqSkills = reqSkills.map(s => s.toLowerCase());
+
+  let totalPoints = 0;
+  let maxPoints = 0;
+  const reasons = [];
+  const gaps = [];
+
+  // 1. Skill Match (Weight: 50 points)
+  if (reqSkills.length > 0) {
+    maxPoints += reqSkills.length * 20;
+    reqSkills.forEach(reqSkill => {
+      if (candSkills.includes(reqSkill)) {
+        totalPoints += 20;
+        reasons.push(`Matches skill: ${reqSkill.charAt(0).toUpperCase() + reqSkill.slice(1)}`);
+      } else {
+        gaps.push(reqSkill.charAt(0).toUpperCase() + reqSkill.slice(1));
+      }
+    });
+  } else if (hasSkills) {
+    maxPoints += 30;
+    totalPoints += 30;
+    reasons.push("Has relevant technical skills");
+  }
+
+  // 2. Visa Match (Weight: 25 points)
+  if (reqVisa) {
+    maxPoints += 30;
+    const cleanReq = reqVisa.toLowerCase();
+    if (candVisa.includes(cleanReq) || cleanReq.includes(candVisa)) {
+      totalPoints += 30;
+      reasons.push(`Matches Visa filter: ${reqVisa}`);
+    } else if (candVisa && (candVisa.includes("usc") || candVisa.includes("us citizen") || candVisa.includes("green card") || candVisa.includes("permanent resident"))) {
+      totalPoints += 25;
+      reasons.push(`Permanent residency covers visa need (${candidate["VISA"]})`);
+    } else {
+      gaps.push(`Expected Visa: ${reqVisa}`);
+    }
+  } else if (hasVisa) {
+    maxPoints += 20;
+    totalPoints += 20;
+    reasons.push(`Visa listed: ${candidate["VISA"]}`);
+  }
+
+  // 3. Location Match (Weight: 25 points)
+  if (reqLocation) {
+    maxPoints += 30;
+    const cleanLoc = reqLocation.toLowerCase();
+    if (candLocation.includes(cleanLoc) || cleanLoc.includes(candLocation)) {
+      totalPoints += 30;
+      reasons.push(`Matches location: ${reqLocation}`);
+    } else {
+      gaps.push(`Location mismatch (requires relocation to ${reqLocation})`);
+    }
+  } else if (hasLocation) {
+    maxPoints += 20;
+    totalPoints += 20;
+    reasons.push(`Located in ${candidate["Current Location"]}`);
+  }
+
+  let pct = maxPoints > 0 ? Math.round((totalPoints / maxPoints) * 100) : 80;
+  if (pct > 99) pct = 99;
+  if (pct < 35) pct = 35;
+
+  return {
+    score: pct,
+    isProfileStrength: false,
+    reasons,
+    gaps,
+  };
+}
+
+export default function CandidateCard({ candidate, selected, onClick, onFavoriteToggle, query = "", filters = {} }) {
   const [localFavorite, setLocalFavorite] = useState(false);
 
   const favorited = onFavoriteToggle ? !!candidate.favorite : localFavorite;
@@ -37,6 +176,8 @@ export default function CandidateCard({ candidate, selected, onClick, onFavorite
   const email     = candidate["Email"]?.trim() || "";
   const linkedin  = candidate["LinkedIn"]?.trim() || "";
   const resumeUrl = candidate["resume_url"]?.trim() || "";
+
+  const matchResult = calculateMatchScore(candidate, query, filters);
 
   /* Skills: parse pipe- or comma-separated */
   const allSkills = candidate["Skills"]
@@ -113,17 +254,36 @@ export default function CandidateCard({ candidate, selected, onClick, onFavorite
           )}
         </div>
 
-        {/* Status badges (top-right) */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
-          {email && (
-            <span className="badge badge-green">Email</span>
-          )}
-          {linkedin && (
-            <span className="badge badge-blue">LinkedIn</span>
-          )}
-          {resumeUrl && (
-            <span className="badge badge-gray">Resume</span>
-          )}
+        {/* Status badges (top-right) - AI Match Score badge */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "4px 8px",
+              borderRadius: "var(--radius-full)",
+              fontSize: "11px",
+              fontWeight: 700,
+              background: matchResult.isProfileStrength ? "#F0FDF4" : "#F5F3FF",
+              color: matchResult.isProfileStrength ? "#16A34A" : "#7C3AED",
+              border: matchResult.isProfileStrength ? "1px solid #BBF7D0" : "1px solid #D8B4FE",
+              boxShadow: "var(--shadow-xs)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {matchResult.isProfileStrength ? (
+              <>
+                <Check size={10} strokeWidth={2.5} />
+                <span>{matchResult.score}% Strength</span>
+              </>
+            ) : (
+              <>
+                <Sparkles size={10} style={{ fill: "#7C3AED" }} />
+                <span>{matchResult.score}% Match</span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

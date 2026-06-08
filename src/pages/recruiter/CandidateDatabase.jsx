@@ -650,6 +650,8 @@ export default function CandidateDatabase() {
                         selected={selectedCandidate === candidate}
                         onClick={() => setSelectedCandidate(candidate)}
                         onFavoriteToggle={handleToggleFavorite}
+                        query={query}
+                        filters={filters}
                       />
                     </motion.div>
                   ))}
@@ -674,6 +676,8 @@ export default function CandidateDatabase() {
                 candidate={selectedCandidate} 
                 onFavoriteToggle={handleToggleFavorite} 
                 onCandidateUpdate={handleCandidateUpdate}
+                query={query}
+                filters={filters}
               />
             </motion.div>
           </AnimatePresence>

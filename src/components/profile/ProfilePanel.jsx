@@ -16,8 +16,16 @@ import {
   ChevronRight,
   User,
   Plus,
+  Brain,
+  TrendingUp,
+  Award,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { parseNaturalQuery } from "../ai/AISearchBar";
+import { calculateMatchScore } from "../candidates/CandidateCard";
 
 /* ─── Avatar helpers ─────────────────────────────────────── */
 const AVATAR_COLORS = ["#2563EB", "#7C3AED", "#D97706", "#16A34A", "#E11D48"];
@@ -64,6 +72,7 @@ function getEmbeddableResumeUrl(url) {
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "skills", label: "Skills" },
+  { id: "ai", label: "AI Insights ✨" },
   { id: "resume", label: "Resume" },
   { id: "notes", label: "Notes" },
   { id: "activity", label: "Activity" },
@@ -100,6 +109,174 @@ const MOCK_ACTIVITY = [
   { id: 5, label: "Favorited", time: "Jun 5, 2026 · 11:30 AM", active: false },
 ];
 
+/* ─── Tailored Technical Questions Database ──────────────── */
+function getTailoredQuestions(title = "", skills = []) {
+  const topSkills = skills.slice(0, 4);
+  const techQuestions = [];
+  
+  // Custom skill-based questions
+  if (skills.some(s => s.toLowerCase() === "snowflake")) {
+    techQuestions.push({
+      q: "Explain how you would design an automated data ingestion pipeline into Snowflake. How do you choose clustering keys and optimize query performance for multi-terabyte datasets?",
+      a: "Evaluate their experience with Snowpipe, COPY INTO, data loading best practices, and clustering key selection (avoiding over-clustering and utilizing high-query-filter columns)."
+    });
+  }
+  if (skills.some(s => s.toLowerCase() === "python")) {
+    techQuestions.push({
+      q: "When processing large data structures in Python, how do you handle memory constraints and concurrency? Have you used generators, multiprocessing, or asyncio in production?",
+      a: "Look for mentions of generator functions (yield) to stream data, pandas chunking, multiprocessing for CPU-bound tasks, and general awareness of Python's GIL limitations."
+    });
+  }
+  if (skills.some(s => s.toLowerCase() === "aws")) {
+    techQuestions.push({
+      q: "How do you configure secure, principle-of-least-privilege IAM roles for serverless tasks (e.g. AWS Lambda) connecting to databases or storage? How do you manage API secrets?",
+      a: "Assess usage of IAM roles rather than hardcoded access keys, AWS Secrets Manager or Parameter Store integration, and KMS encryption for sensitive data at rest."
+    });
+  }
+  if (skills.some(s => s.toLowerCase() === "react")) {
+    techQuestions.push({
+      q: "What strategy do you use to optimize React render cycles in high-throughput dashboard pages? How do you leverage hooks like useMemo, useCallback, and windowing?",
+      a: "Look for profiling workflows, React.memo, virtualized/windowed tables (like react-window) for large datasets, and techniques to prevent parent rerenders."
+    });
+  }
+  if (skills.some(s => s.toLowerCase() === "java")) {
+    techQuestions.push({
+      q: "How do you diagnose and resolve memory leaks or garbage collection latency issues in a JVM-based microservice environment?",
+      a: "Check for experience using heap dump analyzers (Eclipse MAT), profilers (JProfiler, VisualVM), JVM tuning flags (-Xmx, GC algorithm selections like G1GC or ZGC)."
+    });
+  }
+  if (skills.some(s => s.toLowerCase() === "kubernetes" || s.toLowerCase() === "docker")) {
+    techQuestions.push({
+      q: "How do you configure pod resource limits and health probes (readiness/liveness) to ensure zero-downtime rolling updates in Kubernetes?",
+      a: "Assess understanding of resource requests vs limits, configure probes correctly to avoid premature traffic routing, and rolling update strategy settings (maxSurge, maxUnavailable)."
+    });
+  }
+
+  // Fallbacks if we don't have enough specific tech questions
+  const fallbacks = [
+    {
+      q: `How do you structure code quality checks, automated testing (unit/integration), and CI/CD validation when deploying systems using ${topSkills[0] || "your primary technologies"}?`,
+      a: `Look for usage of linting tools, testing frameworks (Jest, PyTest), automated build pipelines, and regression testing practices.`
+    },
+    {
+      q: `Can you describe a challenging production bug or outage you faced in a system running ${topSkills[1] || "your core stack"}? What was your monitoring, triage, and post-mortem process?`,
+      a: `Evaluate problem-solving methodologies, log analysis skills, post-mortem writeups, and structural changes to prevent recurrence.`
+    },
+    {
+      q: `How do you approach API design (RESTful, GraphQL, etc.) when building services that need to interface with other systems? How do you handle schema versioning?`,
+      a: `Look for adherence to design guidelines, versioning in URLs or headers, documentation (Swagger/OpenAPI), and backward compatibility strategies.`
+    }
+  ];
+
+  let list = [...techQuestions];
+  let fallbackIndex = 0;
+  while (list.length < 3 && fallbackIndex < fallbacks.length) {
+    list.push(fallbacks[fallbackIndex]);
+    fallbackIndex++;
+  }
+
+  return list.slice(0, 3);
+}
+
+/* ─── AI Outreach Email Generator ───────────────────────── */
+function generateOutreachEmail(name = "", title = "", skills = [], company = "", tone = "professional") {
+  const cName = name || "there";
+  const cTitle = title || "Talented Professional";
+  const cEmployer = company ? `at ${company}` : "";
+  const mainSkill = skills[0] || "technical background";
+  
+  if (tone === "friendly") {
+    return `Hi ${cName},
+
+Hope your week is off to a great start!
+
+I came across your profile and was really impressed by your background as a ${cTitle}${cEmployer ? ` ${cEmployer}` : ""}. Your work with ${skills.slice(0, 3).join(", ")} stands out, and I think you'd be a fantastic fit for some exciting roles we are currently hiring for.
+
+Our team is building next-generation platforms, and someone with your strong expertise in ${mainSkill} would play a key role in our success. 
+
+Would you be open to a casual 10-minute chat sometime this week to share what you're looking for next? Let me know what days/times work best for you!
+
+Best,
+[Your Name]
+EzHire Recruitment Team`;
+  }
+  
+  if (tone === "quick") {
+    return `Hi ${cName} - quick question for you.
+
+I'm recruiting for a premium role looking for a strong ${cTitle} with deep expertise in ${skills.slice(0, 2).join(" & ")}. 
+
+Your background${cEmployer ? ` ${cEmployer}` : ""} looks like a great match. Are you open to exploring new opportunities at the moment? 
+
+If so, let me know when you might have 5 minutes for a quick intro call.
+
+Thanks!
+[Your Name]`;
+  }
+
+  // Default: professional
+  return `Dear ${cName},
+
+I hope this message finds you well.
+
+I am currently leading a search for a senior-level position matching your experience. Given your impressive background as a ${cTitle}${cEmployer ? ` ${cEmployer}` : ""} and your specialized skills in ${skills.slice(0, 3).join(", ")}, I believe this opportunity would align well with your career path.
+
+We are looking for someone who can drive engineering excellence and lead key initiatives in the ${mainSkill} space.
+
+If you are open to discussing this opportunity, please let me know your availability for a brief introductory call, or feel free to share your updated resume.
+
+Sincerely,
+[Your Name]
+EzHire Recruiting Agency`;
+}
+
+/* ─── Salary Estimator ──────────────────────────────────── */
+function calculateSalaryEstimate(location = "", title = "", skills = []) {
+  let baseMin = 90;
+  let baseMax = 120;
+  const t = (title || "").toLowerCase();
+  
+  if (t.includes("sr") || t.includes("senior") || t.includes("lead") || t.includes("architect") || t.includes("principal")) {
+    baseMin = 135;
+    baseMax = 180;
+  } else if (t.includes("junior") || t.includes("jr") || t.includes("intern")) {
+    baseMin = 65;
+    baseMax = 90;
+  }
+
+  const loc = (location || "").toLowerCase();
+  let multiplier = 1.0;
+  if (loc.includes("san francisco") || loc.includes("sf") || loc.includes("california") || loc.includes("ca") || loc.includes("new york") || loc.includes("ny")) {
+    multiplier = 1.25;
+  } else if (loc.includes("dallas") || loc.includes("houston") || loc.includes("texas") || loc.includes("tx") || loc.includes("seattle") || loc.includes("boston")) {
+    multiplier = 1.15;
+  } else if (loc.includes("remote")) {
+    multiplier = 1.05;
+  } else if (loc.includes("india") || loc.includes("bangalore") || loc.includes("hyderabad") || loc.includes("pune") || loc.includes("bengaluru")) {
+    baseMin = 25;
+    baseMax = 45;
+    multiplier = 1.0;
+  }
+
+  let bonus = 0;
+  if (skills.some(s => ["snowflake", "aws", "kubernetes", "machine learning", "pytorch", "databricks"].includes(s.toLowerCase()))) {
+    bonus = 15;
+  }
+
+  const finalMin = Math.round((baseMin * multiplier) + bonus);
+  const finalMax = Math.round((baseMax * multiplier) + bonus);
+
+  // If offshore currency
+  const currencySymbol = (loc.includes("india") || loc.includes("bangalore") || loc.includes("hyderabad") || loc.includes("pune") || loc.includes("bengaluru")) ? "₹" : "$";
+  const suffix = currencySymbol === "₹" ? " L" : "k"; // Lakhs vs Thousands
+  
+  return {
+    min: `${currencySymbol}${finalMin}${suffix}`,
+    max: `${currencySymbol}${finalMax}${suffix}`,
+    verdict: finalMin >= 140 ? "Top-Tier Candidate" : finalMin >= 100 ? "Highly Competitive" : "Standard Fit",
+  };
+}
+
 /* ─── Sub-components ─────────────────────────────────────── */
 function InfoRow({ icon, label, value }) {
   if (!value) return null;
@@ -131,7 +308,7 @@ function Spinner() {
 /* ════════════════════════════════════════════════════════════
    ProfilePanel
    ════════════════════════════════════════════════════════════ */
-export default function ProfilePanel({ candidate, onFavoriteToggle, onCandidateUpdate }) {
+export default function ProfilePanel({ candidate, onFavoriteToggle, onCandidateUpdate, query = "", filters = {} }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [localFavorite, setLocalFavorite] = useState(false);
   
@@ -145,6 +322,13 @@ export default function ProfilePanel({ candidate, onFavoriteToggle, onCandidateU
   const [noteType, setNoteType] = useState("text"); // "text" or "table"
   const [tableInput, setTableInput] = useState("");
   const [tableRows, setTableRows] = useState(null);
+
+  // AI Insights Tab States
+  const [questions, setQuestions] = useState([]);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [emailTone, setEmailTone] = useState("professional");
+  const [emailText, setEmailText] = useState("");
+  const [emailLoading, setEmailLoading] = useState(false);
 
   const favorited = onFavoriteToggle ? !!candidate?.favorite : localFavorite;
 
@@ -187,8 +371,27 @@ export default function ProfilePanel({ candidate, onFavoriteToggle, onCandidateU
         // Fallback to mock notes for candidates without saved database notes
         setSavedNotes(MOCK_NOTES);
       }
+
+      // Initialize AI insights data
+      const skillsArr = candidate["Skills"]
+        ? candidate["Skills"].split(/[|,]/).map((s) => s.trim()).filter(Boolean)
+        : [];
+      const qList = getTailoredQuestions(candidate["Title"], skillsArr);
+      setQuestions(qList);
+
+      const email = generateOutreachEmail(
+        candidate["Candidate Name"],
+        candidate["Title"],
+        skillsArr,
+        candidate["Employer"] || "",
+        "professional"
+      );
+      setEmailTone("professional");
+      setEmailText(email);
     } else {
       setSavedNotes([]);
+      setQuestions([]);
+      setEmailText("");
     }
   }, [candidate]);
 
@@ -345,6 +548,36 @@ export default function ProfilePanel({ candidate, onFavoriteToggle, onCandidateU
     setTableInput("");
     setTableRows(null);
   };
+
+  const handleToneChange = (tone) => {
+    setEmailTone(tone);
+    setEmailLoading(true);
+    setTimeout(() => {
+      const email = generateOutreachEmail(
+        candidate["Candidate Name"],
+        candidate["Title"],
+        allSkills,
+        candidate["Employer"] || "",
+        tone
+      );
+      setEmailText(email);
+      setEmailLoading(false);
+    }, 600);
+  };
+
+  const handleRegenerateQuestions = () => {
+    setQuestionsLoading(true);
+    setTimeout(() => {
+      const qList = getTailoredQuestions(candidate["Title"], allSkills);
+      const shuffled = [...qList].sort(() => 0.5 - Math.random());
+      setQuestions(shuffled);
+      setQuestionsLoading(false);
+      toast.success("Questions updated!");
+    }, 1000);
+  };
+
+  const matchResult = calculateMatchScore(candidate, query, filters);
+  const salaryEst = calculateSalaryEstimate(location, title, allSkills);
 
   /* ── Render ──────────────────────────────────── */
   return (
@@ -601,6 +834,258 @@ export default function ProfilePanel({ candidate, onFavoriteToggle, onCandidateU
                 ))}
               </div>
             )}
+          </motion.div>
+        )}
+
+        {/* ══ TAB: AI Insights ═════════════════════ */}
+        {activeTab === "ai" && (
+          <motion.div
+            key="ai"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{ display: "flex", flexDirection: "column", gap: 20 }}
+          >
+            {/* Row 1: Match Score Breakdown */}
+            <div className="card-sm" style={{ padding: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Brain size={18} style={{ color: "#7C3AED" }} />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+                    {matchResult.isProfileStrength ? "Profile Completeness Strength" : "AI Search Fit Score"}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 22,
+                    fontWeight: 700,
+                    color: matchResult.isProfileStrength ? "#16A34A" : "#7C3AED",
+                  }}
+                >
+                  {matchResult.score}%
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="progress-bar" style={{ height: 8, marginBottom: 16, background: "var(--border-soft)", borderRadius: 99, overflow: "hidden" }}>
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${matchResult.score}%` }}
+                  transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
+                  style={{
+                    height: "100%",
+                    borderRadius: 99,
+                    background: matchResult.isProfileStrength
+                      ? "linear-gradient(90deg, #10B981, #059669)"
+                      : "linear-gradient(90deg, #7C3AED, #4F46E5)",
+                  }}
+                />
+              </div>
+
+              {/* Reasons & Gaps */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: 6 }}>
+                    Match Highlights
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    {matchResult.reasons.map((r, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-secondary)" }}>
+                        <CheckCircle2 size={13} style={{ color: "#16A34A" }} />
+                        <span>{r}</span>
+                      </div>
+                    ))}
+                    {matchResult.reasons.length === 0 && (
+                      <div style={{ fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
+                        No specific matches found.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {!matchResult.isProfileStrength && matchResult.gaps.length > 0 && (
+                  <div style={{ marginTop: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-muted)", marginBottom: 6 }}>
+                      Identified Gaps
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                      {matchResult.gaps.map((g, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-secondary)" }}>
+                          <AlertTriangle size={13} style={{ color: "#D97706" }} />
+                          <span>{g}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Row 2: Salary Fit & Market Demand */}
+            <div className="card-sm" style={{ padding: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <TrendingUp size={18} style={{ color: "#16A34A" }} />
+                <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+                  Market Demand & Compensation
+                </span>
+                <span className="badge badge-green" style={{ marginLeft: "auto", fontSize: 10.5 }}>
+                  {salaryEst.verdict}
+                </span>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 10 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>
+                    AI Estimated Salary Fit
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>
+                    {salaryEst.min} - {salaryEst.max}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                    Based on {location || "Remote"} title & tech
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>
+                    Top Technical Strengths
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {allSkills.slice(0, 3).map((s, i) => (
+                      <span key={i} className="badge badge-blue" style={{ fontSize: 10.5, padding: "2px 6px" }}>
+                        {s}
+                      </span>
+                    ))}
+                    {allSkills.length === 0 && (
+                      <span style={{ fontSize: 11.5, color: "var(--text-muted)", fontStyle: "italic" }}>
+                        No skills listed
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 3: Technical Interview Guide */}
+            <div className="card-sm" style={{ padding: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Award size={18} style={{ color: "#7C3AED" }} />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+                    Technical Interview Guide
+                  </span>
+                </div>
+                <button
+                  onClick={handleRegenerateQuestions}
+                  disabled={questionsLoading}
+                  className="btn btn-ghost btn-sm"
+                  style={{ padding: "2px 6px", fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}
+                >
+                  <RefreshCw size={11} style={{ animation: questionsLoading ? "spin 0.8s linear infinite" : "none" }} />
+                  Regenerate
+                </button>
+              </div>
+
+              {questionsLoading ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "20px 0" }}>
+                  <Spinner />
+                  <span style={{ fontSize: 13, color: "var(--text-muted)" }}>Analyzing candidate profile...</span>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {questions.map((qItem, idx) => (
+                    <div key={idx} style={{ borderBottom: idx < questions.length - 1 ? "1px solid var(--border-soft)" : "none", paddingBottom: idx < questions.length - 1 ? 12 : 0 }}>
+                      <div style={{ display: "flex", gap: 6, alignItems: "flex-start", marginBottom: 4 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: "#7C3AED", background: "#F5F3FF", padding: "1px 5px", borderRadius: 4, flexShrink: 0 }}>
+                          Q{idx + 1}
+                        </span>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", lineHeight: 1.4 }}>
+                          {qItem.q}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 28, lineHeight: 1.4, background: "var(--bg-soft)", padding: "6px 10px", borderRadius: "var(--radius-md)", borderLeft: "2.5px solid var(--border)" }}>
+                        <strong style={{ color: "var(--text-secondary)", fontSize: 11, display: "block", marginBottom: 2 }}>What to look for:</strong>
+                        {qItem.a}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Row 4: Outreach Email Drafter */}
+            <div className="card-sm" style={{ padding: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Mail size={18} style={{ color: "#7C3AED" }} />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+                    AI Outreach Assistant
+                  </span>
+                </div>
+                <button
+                  onClick={() => copyToClipboard(emailText, "Email Draft")}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: "4px 8px", fontSize: 11.5 }}
+                >
+                  <Copy size={11} /> Copy Draft
+                </button>
+              </div>
+
+              {/* Tone selector */}
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                {[
+                  { id: "professional", label: "👔 Professional" },
+                  { id: "friendly", label: "👋 Friendly" },
+                  { id: "quick", label: "⚡ Quick Ping" },
+                ].map((tone) => (
+                  <button
+                    key={tone.id}
+                    onClick={() => handleToneChange(tone.id)}
+                    disabled={emailLoading}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: "var(--radius-md)",
+                      fontSize: 11.5,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      border: "none",
+                      background: emailTone === tone.id ? "#7C3AED" : "var(--bg-muted)",
+                      color: emailTone === tone.id ? "#FFF" : "var(--text-secondary)",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {tone.label}
+                  </button>
+                ))}
+              </div>
+
+              {emailLoading ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "30px 0" }}>
+                  <Spinner />
+                  <span style={{ fontSize: 13, color: "var(--text-muted)" }}>Drafting outreach message...</span>
+                </div>
+              ) : (
+                <div style={{ position: "relative" }}>
+                  <textarea
+                    readOnly
+                    rows={8}
+                    value={emailText}
+                    className="input"
+                    style={{
+                      width: "100%",
+                      fontFamily: "monospace",
+                      fontSize: 12,
+                      background: "var(--bg-soft)",
+                      padding: 12,
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-md)",
+                      resize: "none",
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           </motion.div>
         )}
 
