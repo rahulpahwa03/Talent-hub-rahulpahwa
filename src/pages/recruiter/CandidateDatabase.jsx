@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import Spinner from '../../components/ui/Spinner.jsx';
 import ExperienceSlider from '../../components/filters/ExperienceSlider.jsx';
+import { extractTextFromFile, parseResumeText } from '../../lib/resumeParser';
 
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
@@ -837,6 +838,151 @@ function useToast() {
   return { toasts, showToast };
 }
 
+// ─── BULK PARSE MODAL ──────────────────────────────────────────────────────────
+function BulkParseModal({ isOpen, onClose, onSave, showToast }) {
+  const [files, setFiles] = useState([]);
+  const [parsing, setParsing] = useState(false);
+  const fileInputRef = useRef(null);
+
+  if (!isOpen) return null;
+
+  const handleFileChange = (e) => {
+    const selected = Array.from(e.target.files || []);
+    const mapped = selected.map(f => ({
+      file: f,
+      name: f.name,
+      size: (f.size / 1024).toFixed(1) + ' KB',
+      status: 'pending',
+      progress: 0,
+      errorMsg: '',
+      result: null
+    }));
+    setFiles(prev => [...prev, ...mapped]);
+  };
+
+  const startParsing = async () => {
+    setParsing(true);
+    for (let idx = 0; idx < files.length; idx++) {
+      if (files[idx].status === 'done') continue;
+      
+      setFiles(prev => prev.map((f, i) => i === idx ? { ...f, status: 'parsing', progress: 15 } : f));
+      
+      const fileData = files[idx].file;
+      try {
+        setFiles(prev => prev.map((f, i) => i === idx ? { ...f, progress: 40 } : f));
+        const rawText = await extractTextFromFile(fileData);
+        
+        setFiles(prev => prev.map((f, i) => i === idx ? { ...f, progress: 75 } : f));
+        const parsed = parseResumeText(rawText, fileData.name);
+        
+        setFiles(prev => prev.map((f, i) => i === idx ? { ...f, status: 'done', progress: 100, result: parsed } : f));
+      } catch (err) {
+        setFiles(prev => prev.map((f, i) => i === idx ? { ...f, status: 'error', progress: 100, errorMsg: err.message || 'Parsing error' } : f));
+      }
+    }
+    setParsing(false);
+  };
+
+  const handleSave = () => {
+    const parsedCandidates = files
+      .filter(f => f.status === 'done' && f.result)
+      .map(f => ({
+        name: f.result.name || f.name.replace(/\.[^/.]+$/, ""),
+        role: f.result.title || "Software Engineer",
+        location: f.result.location || "Remote",
+        visa: f.result.visa || "USC",
+        experience: parseFloat(f.result.experience) || 5,
+        email: f.result.email || "",
+        phone: f.result.phone || "",
+        linkedin: f.result.linkedin || "",
+        summary: f.result.summary || "",
+        skills: f.result.skills || []
+      }));
+
+    if (parsedCandidates.length === 0) {
+      showToast("No successfully parsed profiles to save.", "error");
+      return;
+    }
+
+    onSave(parsedCandidates);
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1000 }} onClick={onClose}>
+      <div className="modal-box" style={{ maxWidth: 650, width: '90%', background: '#fff', color: '#1A1A2E', borderRadius: 12, padding: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E8E6F0', paddingBottom: 12, marginBottom: 20 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: '#1A1A2E', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#6C5CE7" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m-9 1V4a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+            </svg>
+            Bulk Parsing Portal
+          </h3>
+          <button className="btn-ghost sm" onClick={onClose} style={{ padding: 4 }}>✕</button>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label className="dropzone" style={{ border: '2px dashed #C4B5FD', background: '#F5F3FF', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '30px 20px', cursor: 'pointer', borderRadius: 8 }}>
+            <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="#6C5CE7" strokeWidth="2" style={{ marginBottom: 12 }}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <span style={{ fontSize: 14, fontWeight: 500, color: '#1A1A2E', marginBottom: 4 }}>Select Multiple Resumes to Parse</span>
+            <span style={{ fontSize: 12, color: '#6B6B8A' }}>PDF, DOCX, DOC or TXT formats</span>
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.txt"
+              style={{ display: 'none' }}
+              ref={fileInputRef}
+              onChange={handleFileChange}
+            />
+          </label>
+        </div>
+
+        {files.length > 0 && (
+          <div style={{ maxHeight: 250, overflowY: 'auto', border: '1px solid #E8E6F0', borderRadius: 6, marginBottom: 20, padding: 8 }}>
+            {files.map((f, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: i < files.length - 1 ? '1px solid #F3F4F6' : 'none' }}>
+                <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{f.name}</div>
+                  <div style={{ fontSize: 11, color: '#6B6B8A', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                    <span>{f.size}</span>
+                    {f.status === 'parsing' && <span style={{ color: '#6C5CE7' }}>· Parsing ({f.progress}%)</span>}
+                    {f.status === 'done' && <span style={{ color: '#10B981' }}>· Parsed: {f.result?.name || 'Success'}</span>}
+                    {f.status === 'error' && <span style={{ color: '#EF4444' }}>· Error: {f.errorMsg}</span>}
+                  </div>
+                  {f.status === 'parsing' && (
+                    <div style={{ height: 4, background: '#EEF2F6', borderRadius: 2, overflow: 'hidden', marginTop: 6 }}>
+                      <div style={{ height: '100%', width: `${f.progress}%`, background: '#6C5CE7', transition: 'width 0.2s ease' }} />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <button className="btn-ghost sm text-red" style={{ padding: 4 }} onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))}>✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button className="btn-outlined sm" onClick={onClose}>Cancel</button>
+          {files.some(f => f.status === 'pending') && (
+            <button className="btn-filled sm" onClick={startParsing} disabled={parsing}>
+              {parsing ? 'Parsing...' : 'Start Parsing'}
+            </button>
+          )}
+          {files.some(f => f.status === 'done') && (
+            <button className="btn-filled sm" onClick={handleSave} style={{ background: '#10B981' }}>
+              Save Parsed Profiles
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── INLINE CANDIDATE CARD (for Ezra chat) ────────────────────────────────────
 function InlineCandidateCard({ candidate, onViewProfile, onDraftEmail }) {
   const [bookmarked, setBookmarked] = useState(false);
@@ -872,7 +1018,6 @@ function InlineCandidateCard({ candidate, onViewProfile, onDraftEmail }) {
           {candidate.location}
         </span>
         <span style={{ fontSize: 11, fontWeight: 500, background: '#F0EEFF', color: '#5B4FCC', borderRadius: 20, padding: '2px 8px' }}>{candidate.visa}</span>
-        <span style={{ fontSize: 12, color: '#6B6B8A' }}>{candidate.experience} yrs</span>
       </div>
 
       {/* Row 3 — AI summary */}
@@ -1254,32 +1399,164 @@ RULES & ACTIONS YOU CAN INITIATE:
 }
 
 // ─── CANDIDATE GRID CARD ─────────────────────────────────────────────────────
-function CandidateGridCard({ candidate, selected, onClick, onDraftEmail }) {
+function CandidateGridCard({ candidate, selected, onClick, onDraftEmail, onUploadResume, onUpdateCandidate }) {
   const [bookmarked, setBookmarked] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    location: candidate.location || '',
+    visa: candidate.visa || '',
+    email: candidate.email || '',
+    phone: candidate.phone || '',
+    linkedin: candidate.linkedin || ''
+  });
+
   const allSkills = Object.values(candidate.skills || {}).flat();
   const shown = allSkills.slice(0, 4);
   const extra = allSkills.length - shown.length;
 
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      await onUploadResume(candidate, file);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleSave = async (e) => {
+    e.stopPropagation();
+    setIsUploading(true);
+    try {
+      await onUpdateCandidate(candidate, editForm);
+      setIsEditing(false);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div className="cand-card selected" onClick={e => e.stopPropagation()} style={{ animation: 'fadeIn 0.2s ease', padding: '16px' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#6C5CE7', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Edit Candidate Details</span>
+          <button className="btn-ghost sm" style={{ padding: 4 }} onClick={() => setIsEditing(false)}>Cancel</button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>Email</label>
+            <input
+              type="email"
+              value={editForm.email}
+              onChange={e => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
+              placeholder="Email Address"
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>Phone</label>
+            <input
+              type="text"
+              value={editForm.phone}
+              onChange={e => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
+              placeholder="Phone Number"
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>Location</label>
+            <input
+              type="text"
+              value={editForm.location}
+              onChange={e => setEditForm(prev => ({ ...prev, location: e.target.value }))}
+              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
+              placeholder="Location"
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>Visa Status</label>
+            <input
+              type="text"
+              value={editForm.visa}
+              onChange={e => setEditForm(prev => ({ ...prev, visa: e.target.value }))}
+              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
+              placeholder="Visa Status"
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>LinkedIn</label>
+            <input
+              type="text"
+              value={editForm.linkedin}
+              onChange={e => setEditForm(prev => ({ ...prev, linkedin: e.target.value }))}
+              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
+              placeholder="LinkedIn URL"
+            />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-filled sm" style={{ flex: 1, padding: '6px' }} onClick={handleSave} disabled={isUploading}>
+            Save Details
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`cand-card${selected ? ' selected' : ''}`} onClick={onClick}>
       {/* Top row */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <Avatar name={candidate.name} size={42} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{candidate.name}</div>
           <div style={{ fontSize: 12, color: '#6B6B8A', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{candidate.role}</div>
         </div>
-        <StatusBadge status={candidate.status} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <StatusBadge status={candidate.status} />
+          <button
+            className="btn-icon"
+            style={{ width: 26, height: 26, padding: 0, background: '#fff', border: '1px solid #E8E6F0', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
+            title="Edit details"
+          >
+            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="#6B6B8A" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {/* Meta */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, color: '#6B6B8A', display: 'flex', alignItems: 'center', gap: 3 }}>
-          <svg width="11" height="11" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeWidth="2" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7Z"/><circle cx="12" cy="9" r="2.5" stroke="currentColor" strokeWidth="2"/></svg>
-          {candidate.location}
-        </span>
-        <span style={{ fontSize: 11, fontWeight: 500, background: '#F0EEFF', color: '#5B4FCC', borderRadius: 20, padding: '2px 8px' }}>{candidate.visa}</span>
-        <span style={{ fontSize: 12, color: '#6B6B8A' }}>{candidate.experience} yrs</span>
+      {/* Meta details */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, fontSize: 12, color: '#1A1A2E' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontWeight: 500, color: '#6B6B8A', width: 65 }}>📍 Location:</span>
+          <span style={{ color: candidate.location ? '#1A1A2E' : '#EF4444', fontStyle: candidate.location ? 'normal' : 'italic' }}>{candidate.location || "Not Available"}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontWeight: 500, color: '#6B6B8A', width: 65 }}>🛂 Visa:</span>
+          <span style={{ color: candidate.visa ? '#1A1A2E' : '#EF4444', fontStyle: candidate.visa ? 'normal' : 'italic' }}>{candidate.visa || "Not Available"}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontWeight: 500, color: '#6B6B8A', width: 65 }}>📧 Email:</span>
+          <span style={{ wordBreak: 'break-all', color: candidate.email ? '#1A1A2E' : '#EF4444', fontStyle: candidate.email ? 'normal' : 'italic' }}>{candidate.email || "Not Available"}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontWeight: 500, color: '#6B6B8A', width: 65 }}>📞 Phone:</span>
+          <span style={{ color: candidate.phone ? '#1A1A2E' : '#EF4444', fontStyle: candidate.phone ? 'normal' : 'italic' }}>{candidate.phone || "Not Available"}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontWeight: 500, color: '#6B6B8A', width: 65 }}>🔗 LinkedIn:</span>
+          {candidate.linkedin ? (
+            <a href={candidate.linkedin.startsWith('http') ? candidate.linkedin : `https://${candidate.linkedin}`} target="_blank" rel="noopener noreferrer" style={{ color: '#6C5CE7', textDecoration: 'none' }} onClick={e => e.stopPropagation()}>
+              View Profile
+            </a>
+          ) : (
+            <span style={{ color: '#EF4444', fontStyle: 'italic' }}>Not Available</span>
+          )}
+        </div>
       </div>
 
       {/* Skills */}
@@ -1291,6 +1568,21 @@ function CandidateGridCard({ candidate, selected, onClick, onDraftEmail }) {
       {/* Actions */}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
         <button className="btn-outlined sm" style={{ flex: 1 }} onClick={() => onDraftEmail(candidate)}>Draft email</button>
+        
+        <label className="btn-outlined sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, flex: 1, margin: 0, padding: '6px 8px', fontSize: 11, border: '1px solid #E8E6F0', borderRadius: 6, background: '#fff', color: '#6B6B8A' }}>
+          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+          <span>{isUploading ? 'Uploading...' : candidate.resume_url ? 'Update CV' : 'Upload CV'}</span>
+          <input
+            type="file"
+            accept=".pdf,.doc,.docx"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+            disabled={isUploading}
+          />
+        </label>
+
         <button
           className={`btn-icon${bookmarked ? ' bookmarked' : ''}`}
           onClick={e => { e.stopPropagation(); setBookmarked(b => !b); }}
@@ -1563,7 +1855,9 @@ function CandidatesPanel({
   linkedinFilter, setLinkedinFilter,
   emailFilter, setEmailFilter,
   phoneFilter, setPhoneFilter,
-  onScrape
+  onScrape,
+  onUploadResume: handleUploadResume,
+  onUpdateCandidate
 }) {
   const [loading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
@@ -1732,6 +2026,8 @@ function CandidatesPanel({
                   selected={selectedId === c.id}
                   onClick={() => { setSelectedId(c.id); onViewProfile(c); }}
                   onDraftEmail={onDraftEmail}
+                  onUploadResume={handleUploadResume}
+                  onUpdateCandidate={onUpdateCandidate}
                 />
               ))}
             </div>
@@ -1772,6 +2068,7 @@ export default function CandidateDatabase() {
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [ezraOpen, setEzraOpen] = useState(true);
   const [draftTarget, setDraftTarget] = useState(null);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const { toasts, showToast } = useToast();
   
   // Lifted filter states
@@ -1805,6 +2102,178 @@ export default function CandidateDatabase() {
 
   const [candidatesList, setCandidatesList] = useState(CANDIDATES);
 
+  const handleUploadResume = async (candidate, file) => {
+    if (!file) return;
+    const allowed = ["pdf", "doc", "docx"];
+    const ext = file.name.split(".").pop().toLowerCase();
+    if (!allowed.includes(ext)) {
+      showToast("Invalid file type. Please upload a PDF, DOC, or DOCX document.", "error");
+      return;
+    }
+
+    try {
+      if (!supabase) {
+        const fakeUrl = URL.createObjectURL(file);
+        setCandidatesList(prev => prev.map(c => {
+          if (c.id === candidate.id) {
+            return { ...c, resume_url: fakeUrl };
+          }
+          return c;
+        }));
+        if (selectedCandidate && selectedCandidate.id === candidate.id) {
+          setSelectedCandidate(prev => ({ ...prev, resume_url: fakeUrl }));
+        }
+        showToast("Resume updated locally! (Supabase not configured)", "success");
+        return;
+      }
+
+      const slug = (candidate.name || "candidate")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      const ts = Date.now();
+      const fileName = `${slug}_${ts}.${ext}`;
+      const path = `uploads/${fileName}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from("resumes")
+        .upload(path, file, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: file.type || "application/octet-stream",
+        });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: urlData } = supabase.storage
+        .from("resumes")
+        .getPublicUrl(path);
+      
+      const newUrl = urlData?.publicUrl || "";
+
+      const { error: dbErr } = await supabase
+        .from("candidates")
+        .update({
+          "resume_url": newUrl,
+          "resume_file_name": file.name,
+          "last_updated": new Date().toISOString(),
+        })
+        .or(`id.eq.${candidate.id},Email.eq.${candidate.email}`);
+
+      if (dbErr) throw dbErr;
+
+      showToast("Resume uploaded successfully!", "success");
+      await loadCandidates();
+      
+      if (selectedCandidate && selectedCandidate.id === candidate.id) {
+        setSelectedCandidate(prev => ({ ...prev, resume_url: newUrl }));
+      }
+    } catch (err) {
+      console.error("[CandidateDatabase] Resume upload error:", err);
+      showToast(err.message || "Failed to upload resume.", "error");
+    }
+  };
+
+  const handleUpdateCandidateFields = async (candidate, updatedFields) => {
+    try {
+      if (!supabase) {
+        setCandidatesList(prev => prev.map(c => {
+          if (c.id === candidate.id) {
+            return { ...c, ...updatedFields };
+          }
+          return c;
+        }));
+        if (selectedCandidate && selectedCandidate.id === candidate.id) {
+          setSelectedCandidate(prev => ({ ...prev, ...updatedFields }));
+        }
+        showToast("Candidate fields updated locally! (Supabase not configured)", "success");
+        return;
+      }
+
+      const mappedUpdate = {};
+      if (updatedFields.location !== undefined) mappedUpdate["Current Location"] = updatedFields.location;
+      if (updatedFields.visa !== undefined) mappedUpdate["VISA"] = updatedFields.visa;
+      if (updatedFields.email !== undefined) mappedUpdate["Email"] = updatedFields.email;
+      if (updatedFields.phone !== undefined) mappedUpdate["Contact No"] = updatedFields.phone;
+      if (updatedFields.linkedin !== undefined) mappedUpdate["LinkedIn"] = updatedFields.linkedin;
+      mappedUpdate["last_updated"] = new Date().toISOString();
+
+      const { error: dbErr } = await supabase
+        .from("candidates")
+        .update(mappedUpdate)
+        .or(`id.eq.${candidate.id},Email.eq.${candidate.email}`);
+
+      if (dbErr) throw dbErr;
+
+      showToast("Candidate details updated successfully!", "success");
+      await loadCandidates();
+
+      if (selectedCandidate && selectedCandidate.id === candidate.id) {
+        setSelectedCandidate(prev => ({ ...prev, ...updatedFields }));
+      }
+    } catch (err) {
+      console.error("[CandidateDatabase] Details update error:", err);
+      showToast(err.message || "Failed to update candidate details.", "error");
+    }
+  };
+
+  const handleSaveParsedBulk = async (parsedProfiles) => {
+    try {
+      if (!supabase) {
+        const newLocalCandidates = parsedProfiles.map((p, index) => ({
+          id: `bulk-${Date.now()}-${index}`,
+          name: p.name,
+          role: p.role,
+          status: "Available Now",
+          location: p.location,
+          visa: p.visa,
+          experience: Number(p.experience) || 5,
+          workPref: "Remote",
+          availableFrom: "Immediately",
+          email: p.email,
+          phone: p.phone,
+          linkedin: p.linkedin,
+          resume_url: "",
+          summary: p.summary || `${p.name} is an experienced professional in this field.`,
+          skills: { All: p.skills || [] },
+          history: [],
+          submissions: []
+        }));
+        setCandidatesList(prev => [...newLocalCandidates, ...prev]);
+        showToast(`Locally saved ${parsedProfiles.length} candidate profiles!`, "success");
+        return;
+      }
+
+      let successCount = 0;
+      for (const p of parsedProfiles) {
+        try {
+          const { error } = await supabase.rpc('insert_candidate', {
+            p_name: p.name,
+            p_email: p.email,
+            p_phone: p.phone,
+            p_linkedin: p.linkedin,
+            p_location: p.location,
+            p_visa: p.visa,
+            p_title: p.role,
+            p_skills: p.skills.join(', '),
+            p_experience: String(p.experience),
+            p_summary: p.summary,
+            p_source: 'bulk_parsing'
+          });
+          if (!error) successCount++;
+        } catch (err) {
+          console.error('Error inserting bulk profile:', err);
+        }
+      }
+
+      showToast(`Successfully saved ${successCount} profiles to database!`, "success");
+      await loadCandidates();
+    } catch (err) {
+      console.error("[CandidateDatabase] Error saving bulk parsed profiles:", err);
+      showToast("Failed to save parsed profiles.", "error");
+    }
+  };
+
   // Crawler simulator state
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlerLogs, setCrawlerLogs] = useState([]);
@@ -1832,44 +2301,110 @@ export default function CandidateDatabase() {
     await addLog(`[Crawl] Bypassing LinkedIn bot detection (human-mimic mode activated)...`, 700);
     await addLog(`[Extract] Found 2 matches on page 1. Extracting profile data...`, 900);
 
-    // Generate 2 realistic candidates matching the search term
+    // Dynamic, query-adaptive generator for unique candidate profiles
     const cleanTerm = term.charAt(0).toUpperCase() + term.slice(1);
-    const mockCrawled = [
-      {
-        name: `Amit ${cleanTerm.includes('Snowflake') ? 'Patel' : 'Sharma'}`,
-        title: `Senior Lead ${cleanTerm} Specialist`,
-        company: cleanTerm.includes('Snowflake') ? 'Capital One' : 'Cognizant',
-        location: 'Austin, TX',
-        visa: 'H1B',
-        experience: 9,
-        email: `amit.${cleanTerm.toLowerCase().replace(/[^a-z]/g, '')}@example.com`,
-        phone: '+1 (512) 555-0198',
-        linkedin: `https://linkedin.com/in/amit-${cleanTerm.toLowerCase().replace(/[^a-z]/g, '')}`,
-        skills: `${cleanTerm}, SQL, Python, Cloud Migration, ETL Pipelines, Data Warehousing`,
-        summary: `Amit is a veteran Lead ${cleanTerm} specialist with 9 years of expertise. Specializes in building high-throughput pipelines, database administration, and migration. Highly experienced in financial services.`,
-        resume_url: 'https://raw.githubusercontent.com/rahulpahwa03/Talent-hub-rahulpahwa/main/public/sample.docx'
-      },
-      {
-        name: `Neha ${cleanTerm.includes('Snowflake') ? 'Reddy' : 'Verma'}`,
-        title: `${cleanTerm} Architect`,
-        company: 'Deloitte',
-        location: 'Chicago, IL',
-        visa: 'USC',
-        experience: 7,
-        email: `neha.${cleanTerm.toLowerCase().replace(/[^a-z]/g, '')}@example.com`,
-        phone: '+1 (312) 555-0143',
-        linkedin: `https://linkedin.com/in/neha-${cleanTerm.toLowerCase().replace(/[^a-z]/g, '')}`,
-        skills: `${cleanTerm}, AWS, Jenkins, Docker, CI/CD, Git, Serverless Architecture`,
-        summary: `Neha is a certified ${cleanTerm} Architect with 7 years of experience. Expert in designing serverless data models, deployment automation, and scaling database clusters. Open to hybrid/remote work.`,
-        resume_url: 'https://raw.githubusercontent.com/rahulpahwa03/Talent-hub-rahulpahwa/main/public/sample.docx'
+    const FIRST_NAMES = ["Amit", "Neha", "Rahul", "Priya", "John", "Sarah", "Suresh", "Emily", "David", "Jessica", "Raj", "Kiran", "Vijay", "Aisha", "Michael"];
+    const LAST_NAMES = ["Patel", "Reddy", "Verma", "Sharma", "Singh", "Smith", "Johnson", "Davis", "Kumar", "Mehta", "Nair", "Chen", "Wong", "Rodriguez", "Taylor"];
+    const LOCATIONS = ["Austin, TX", "Chicago, IL", "Dallas, TX", "Houston, TX", "San Francisco, CA", "New York, NY", "Seattle, WA", "Atlanta, GA", "Boston, MA", "Phoenix, AZ"];
+    const COMPANIES = ["Capital One", "Deloitte", "Cognizant", "Accenture", "Microsoft", "Amazon", "Oracle", "Infosys", "Wipro", "TCS", "JP Morgan", "Goldman Sachs"];
+    const VISAS = ["H1B", "USC", "GC", "OPT EAD", "TN Visa"];
+    
+    const mockCrawled = [];
+    const generatedEmails = new Set();
+    const randItem = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    
+    // Generate 3 unique matching profiles
+    for (let i = 0; i < 3; i++) {
+      const firstName = randItem(FIRST_NAMES);
+      const lastName = randItem(LAST_NAMES);
+      const name = `${firstName} ${lastName}`;
+      
+      const emailLocal = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${Math.floor(Math.random() * 90 + 10)}`;
+      const email = `${emailLocal}@example.com`;
+      
+      if (generatedEmails.has(email)) {
+        i--;
+        continue;
       }
-    ];
+      generatedEmails.add(email);
+
+      const location = randItem(LOCATIONS);
+      const company = randItem(COMPANIES);
+      const visa = randItem(VISAS);
+      const experience = Math.floor(Math.random() * 10) + 3; // 3 to 12 yrs
+      
+      let title = cleanTerm;
+      if (!title.toLowerCase().includes('engineer') && !title.toLowerCase().includes('developer') && !title.toLowerCase().includes('architect') && !title.toLowerCase().includes('specialist')) {
+        title = `${cleanTerm} Engineer`;
+      }
+      if (experience >= 8 && !title.toLowerCase().includes('senior') && !title.toLowerCase().includes('lead')) {
+        title = `Senior ${title}`;
+      }
+
+      // Generate context-relevant skills
+      const techSkills = [cleanTerm, "SQL", "Git"];
+      if (cleanTerm.toLowerCase().includes("snowflake")) {
+        techSkills.push("dbt", "Python", "AWS", "Data Warehousing");
+      } else if (cleanTerm.toLowerCase().includes("react")) {
+        techSkills.push("JavaScript", "TypeScript", "HTML/CSS", "Redux");
+      } else if (cleanTerm.toLowerCase().includes("python")) {
+        techSkills.push("Pandas", "AWS", "PySpark", "Machine Learning");
+      } else if (cleanTerm.toLowerCase().includes("java")) {
+        techSkills.push("Spring Boot", "Microservices", "Docker", "Kubernetes");
+      } else {
+        techSkills.push("Cloud Migration", "CI/CD", "ETL Pipelines");
+      }
+
+      const skills = techSkills.join(", ");
+      const phone = `+1 (${location.includes('TX') ? '512' : location.includes('CA') ? '415' : '312'}) 555-01${Math.floor(Math.random() * 90 + 10)}`;
+      const linkedin = `linkedin.com/in/${firstName.toLowerCase()}-${lastName.toLowerCase()}-${Math.floor(Math.random() * 100)}`;
+      
+      const summary = `${name} is a seasoned ${title} with ${experience} years of professional expertise. Specialized in ${techSkills.slice(1, 4).join(', ')} and delivering end-to-end solutions. Highly experienced working at ${company}.`;
+
+      mockCrawled.push({
+        name,
+        title,
+        company,
+        location,
+        visa,
+        experience,
+        email,
+        phone,
+        linkedin,
+        skills,
+        summary,
+        resume_url: 'https://raw.githubusercontent.com/rahulpahwa03/Talent-hub-rahulpahwa/main/public/sample.docx'
+      });
+    }
 
     for (const cand of mockCrawled) {
       await addLog(`[Extract] Profiles parsed: "${cand.name}" (${cand.title} at ${cand.company})`, 600);
       await addLog(`[Database] Checking if candidate already exists in database...`, 500);
       
       if (!supabase) {
+        // Fallback: local insertion if supabase is not initialized
+        setCandidatesList(prev => {
+          const mappedCand = {
+            id: `bulk-${Date.now()}-${Math.random()}`,
+            name: cand.name,
+            role: cand.title,
+            status: "Available Now",
+            location: cand.location,
+            visa: cand.visa,
+            experience: Number(cand.experience) || 5,
+            workPref: "Remote",
+            availableFrom: "Immediately",
+            email: cand.email,
+            phone: cand.phone,
+            linkedin: cand.linkedin,
+            resume_url: cand.resume_url,
+            summary: cand.summary,
+            skills: { All: cand.skills.split(', ').map(s => s.trim()) },
+            history: [],
+            submissions: []
+          };
+          return [mappedCand, ...prev];
+        });
         await addLog(`[Database] Client not initialized. Simulating mock local storage for ${cand.name}...`, 800);
         continue;
       }
@@ -1908,7 +2443,7 @@ export default function CandidateDatabase() {
     // Refresh lists
     await loadCandidates();
     setIsCrawling(false);
-    showToast(`Successfully scraped & imported 2 candidates!`, 'success');
+    showToast(`Successfully scraped & imported ${mockCrawled.length} candidates!`, 'success');
   };
 
   // Helper fetch function to reuse in useEffect and trigger
@@ -2005,6 +2540,16 @@ export default function CandidateDatabase() {
         </span>
         <div className="ezhire-topbar-actions">
           <button
+            className="btn-outlined sm"
+            style={{ borderColor: '#6C5CE7', color: '#6C5CE7', marginRight: 4 }}
+            onClick={() => setBulkModalOpen(true)}
+          >
+            <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m-9 1V4a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+            </svg>
+            Bulk Parse
+          </button>
+          <button
             className={`btn-ghost sm`}
             onClick={() => navigate('/recruiter/dashboard')}
           >
@@ -2048,6 +2593,8 @@ export default function CandidateDatabase() {
             phoneFilter={phoneFilter}
             setPhoneFilter={setPhoneFilter}
             onScrape={triggerLinkedInCrawl}
+            onUploadResume={handleUploadResume}
+            onUpdateCandidate={handleUpdateCandidateFields}
           />
         ) : (
           <DetailPage
@@ -2068,6 +2615,13 @@ export default function CandidateDatabase() {
           showToast={showToast}
         />
       </div>
+
+      <BulkParseModal
+        isOpen={bulkModalOpen}
+        onClose={() => setBulkModalOpen(false)}
+        onSave={handleSaveParsedBulk}
+        showToast={showToast}
+      />
 
       {/* Scraper Simulation Console overlay */}
       {isCrawling && (
