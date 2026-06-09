@@ -611,8 +611,8 @@ export default function ProfilePanel({ candidate, onFavoriteToggle, onCandidateU
 
           {/* VISA + Location badges */}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-            {visa && <span className="badge badge-blue">🛂 {visa}</span>}
-            {location && <span className="badge badge-gray">📍 {location}</span>}
+            {visa && <span className="badge badge-blue">{visa}</span>}
+            {location && <span className="badge badge-gray">{location}</span>}
           </div>
 
           {/* Action buttons row */}
@@ -724,11 +724,61 @@ export default function ProfilePanel({ candidate, onFavoriteToggle, onCandidateU
             {/* Contact Information */}
             <div style={{ marginBottom: 24 }}>
               <div className="section-title">Contact Information</div>
-              <div className="card-sm" style={{ padding: "4px 16px" }}>
-                <InfoRow icon={<Mail size={14} />} label="Email" value={email} />
-                <InfoRow icon={<Phone size={14} />} label="Phone" value={phone} />
-                <InfoRow icon={<MapPin size={14} />} label="Location" value={location} />
-                <InfoRow icon={<Shield size={14} />} label="Visa" value={visa} />
+              <div className="card-sm" style={{ padding: "8px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border-soft)", padding: "8px 0" }}>
+                  <InfoRow icon={<Mail size={14} />} label="Email" value={email} />
+                  {email && (
+                    <button
+                      className="btn btn-secondary btn-xs"
+                      onClick={() => copyToClipboard(email, "Email")}
+                      style={{ fontSize: 11, padding: "2px 8px" }}
+                    >
+                      Copy
+                    </button>
+                  )}
+                </div>
+                <div style={{ borderBottom: "1px solid var(--border-soft)", padding: "8px 0" }}>
+                  <InfoRow icon={<Phone size={14} />} label="Phone" value={phone} />
+                </div>
+                <div style={{ borderBottom: "1px solid var(--border-soft)", padding: "8px 0" }}>
+                  <InfoRow icon={<MapPin size={14} />} label="Location" value={location} />
+                </div>
+                <div style={{ padding: "8px 0" }}>
+                  <InfoRow icon={<Shield size={14} />} label="Visa" value={visa} />
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Outreach Draft */}
+            <div style={{ marginBottom: 24 }}>
+              <div className="section-title">Quick Outreach Email Draft</div>
+              <div className="card-sm" style={{ padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-secondary)' }}>Draft generated from candidate details</span>
+                  <button 
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      const emailDraft = generateOutreachEmail(name, title, allSkills, candidate["Employer"] || "", "professional");
+                      copyToClipboard(emailDraft, "Outreach Email Draft");
+                    }}
+                  >
+                    Copy Email Draft
+                  </button>
+                </div>
+                <div style={{ 
+                  background: "var(--bg-soft)", 
+                  padding: 12, 
+                  borderRadius: "var(--radius-md)", 
+                  fontSize: 12, 
+                  color: "var(--text-secondary)", 
+                  maxHeight: 110, 
+                  overflowY: "auto", 
+                  whiteSpace: "pre-wrap", 
+                  fontFamily: "monospace",
+                  border: "1px solid var(--border)"
+                }}>
+                  {generateOutreachEmail(name, title, allSkills, candidate["Employer"] || "", "professional")}
+                </div>
               </div>
             </div>
 

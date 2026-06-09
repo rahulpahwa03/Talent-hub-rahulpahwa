@@ -1615,24 +1615,46 @@ function getEmbeddableResumeUrl(url) {
   return url;
 }
 
-// ─── CANDIDATE DETAIL PAGE ────────────────────────────────────────────────────
-function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
+function DetailPage({ candidate, onBack, onDraftEmail, showToast, onUpdateNotes }) {
   const [tab, setTab] = useState('overview'); // 'overview' | 'resume'
   const [notes, setNotes] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
-  const saveTimer = useRef(null);
+
+  useEffect(() => {
+    if (candidate) {
+      setNotes(candidate.notes || '');
+    }
+  }, [candidate]);
 
   const debouncedSave = useCallback(
-    debounce((val) => {
-      setSaveStatus('Saved ✓');
+    debounce(async (val, candidateId) => {
+      if (!candidateId) return;
+      setSaveStatus('Saving...');
+      try {
+        if (supabase) {
+          const { error } = await supabase
+            .from('candidates')
+            .update({ notes: val })
+            .or(`id.eq.${candidateId},candidate_uuid.eq.${candidateId}`);
+          if (error) throw error;
+        }
+        setSaveStatus('Saved ✓');
+        if (onUpdateNotes) {
+          onUpdateNotes(val);
+        }
+      } catch (err) {
+        console.error('Failed to save notes:', err);
+        setSaveStatus('Error saving ✗');
+      }
       setTimeout(() => setSaveStatus(''), 2000);
     }, 800),
-    []
+    [onUpdateNotes]
   );
 
   function handleNotes(e) {
-    setNotes(e.target.value);
-    debouncedSave(e.target.value);
+    const val = e.target.value;
+    setNotes(val);
+    debouncedSave(val, candidate.id || candidate.candidate_uuid);
   }
 
   const statuses = {
@@ -1646,16 +1668,16 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
   const ezraInsights = useMemo(() => {
     let baseRate = 45;
     baseRate += (candidate.experience || 5) * 3.5;
-    if (candidate.role.toLowerCase().includes('architect') || candidate.role.toLowerCase().includes('lead')) baseRate += 22;
-    if (candidate.role.toLowerCase().includes('senior')) baseRate += 12;
-    if (candidate.location.toLowerCase().includes('ca') || candidate.location.toLowerCase().includes('ny') || candidate.location.toLowerCase().includes('jose') || candidate.location.toLowerCase().includes('york')) baseRate += 15;
+    if (candidate.role?.toLowerCase().includes('architect') || candidate.role?.toLowerCase().includes('lead')) baseRate += 22;
+    if (candidate.role?.toLowerCase().includes('senior')) baseRate += 12;
+    if (candidate.location?.toLowerCase().includes('ca') || candidate.location?.toLowerCase().includes('ny') || candidate.location?.toLowerCase().includes('jose') || candidate.location?.toLowerCase().includes('york')) baseRate += 15;
     if (candidate.visa === 'USC' || candidate.visa === 'GC') baseRate += 8;
 
     const rateMin = Math.round(baseRate * 0.9);
     const rateMax = Math.round(baseRate * 1.1);
     
     // Compute a mock demand and recommendation score deterministically
-    const demandScore = Math.min(65 + (candidate.experience * 2) + (Object.values(candidate.skills || {}).flat().length * 1.5), 98);
+    const demandScore = Math.min(65 + ((candidate.experience || 5) * 2) + (Object.values(candidate.skills || {}).flat().length * 1.5), 98);
     const recommendationScore = ((demandScore / 10) + 0.3).toFixed(1);
 
     return {
@@ -1709,18 +1731,17 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
             {/* Stats */}
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {[
-                { icon: '💼', label: 'Experience', value: `${candidate.experience} years` },
-                { icon: '🛂', label: 'Visa', value: candidate.visa },
-                { icon: '📍', label: 'Location', value: candidate.location },
-                { icon: '🏠', label: 'Work pref', value: candidate.workPref },
-                { icon: '📅', label: 'Available from', value: candidate.availableFrom },
-                { icon: '🕐', label: 'Last updated', value: candidate.lastUpdated },
+                { label: 'Experience', value: `${candidate.experience} years` },
+                { label: 'Visa Status', value: candidate.visa },
+                { label: 'Location', value: candidate.location },
+                { label: 'Work Preference', value: candidate.workPref },
+                { label: 'Available from', value: candidate.availableFrom },
+                { label: 'Last updated', value: candidate.lastUpdated },
               ].map(s => (
-                <div key={s.label} className="stat-row" style={{ borderBottom: '1px solid #F7F6FB' }}>
-                  <div style={{ fontSize: 16, width: 24, textAlign: 'center' }}>{s.icon}</div>
+                <div key={s.label} className="stat-row" style={{ borderBottom: '1px solid #F7F6FB', padding: '10px 0' }}>
                   <div style={{ flex: 1 }}>
-                    <div className="stat-label">{s.label}</div>
-                    <div className="stat-value">{s.value}</div>
+                    <div className="stat-label" style={{ fontWeight: 500, color: '#6B6B8A', fontSize: 12 }}>{s.label}</div>
+                    <div className="stat-value" style={{ fontWeight: 600, color: '#1A1A2E', fontSize: 13.5, marginTop: 2 }}>{s.value}</div>
                   </div>
                 </div>
               ))}
@@ -1773,6 +1794,90 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast }) {
                 <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: 12, textAlign: 'center' }}>
                   <div style={{ fontSize: 10, fontWeight: 600, color: '#6B6B8A', textTransform: 'uppercase', marginBottom: 4 }}>Ezra Match Score</div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#B45309' }}>{ezraInsights.readiness}</div>
+                </div>
+              </div>
+
+              {/* Contact Details without emojis */}
+              <div className="detail-card-sm">
+                <div className="detail-section-label">Contact Details</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 0' }}>
+                  {candidate.email && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F7F6FB', paddingBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: '#6B6B8A' }}>Email:</span>
+                        <span style={{ fontSize: 13.5, color: '#1A1A2E' }}>{candidate.email}</span>
+                      </div>
+                      <button 
+                        className="btn-outlined sm" 
+                        style={{ padding: '2px 8px', fontSize: 11 }}
+                        onClick={() => {
+                          navigator.clipboard.writeText(candidate.email);
+                          showToast('Email copied!', 'success');
+                        }}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  )}
+                  {candidate.phone && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F7F6FB', paddingBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: '#6B6B8A' }}>Phone:</span>
+                        <span style={{ fontSize: 13.5, color: '#1A1A2E' }}>{candidate.phone}</span>
+                      </div>
+                      <button 
+                        className="btn-outlined sm" 
+                        style={{ padding: '2px 8px', fontSize: 11 }}
+                        onClick={() => {
+                          navigator.clipboard.writeText(candidate.phone);
+                          showToast('Phone copied!', 'success');
+                        }}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  )}
+                  {candidate.linkedin && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: '#6B6B8A' }}>LinkedIn:</span>
+                        <span style={{ fontSize: 13.5, color: '#1A1A2E', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{candidate.linkedin}</span>
+                      </div>
+                      <a 
+                        href={candidate.linkedin.startsWith('http') ? candidate.linkedin : `https://${candidate.linkedin}`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="btn-outlined sm" 
+                        style={{ padding: '2px 8px', fontSize: 11, textDecoration: 'none' }}
+                      >
+                        Open
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Quick Outreach Draft */}
+              <div className="detail-card-sm">
+                <div className="detail-section-label" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>Quick Email Draft</span>
+                  <button 
+                    className="btn-outlined sm" 
+                    onClick={() => {
+                      const skillsList = Object.values(candidate.skills || {}).flat();
+                      const body = `Hi ${candidate.name.split(' ')[0]},\n\nI hope this email finds you well.\n\nI came across your profile and was highly impressed by your background as a ${candidate.role} with expertise in ${skillsList.slice(0, 4).join(', ')}.\n\nWe have an exciting opportunity that matches your skills perfectly. Let me know if you would be open to a brief 10-minute chat this week to discuss details.\n\nLooking forward to hearing from you!\n\nBest regards,\nRahul\nEzHire Recruiting Team`;
+                      navigator.clipboard.writeText(body);
+                      showToast('Outreach draft copied!', 'success');
+                    }}
+                  >
+                    Copy Draft
+                  </button>
+                </div>
+                <div style={{ background: '#F7F6FB', padding: 12, borderRadius: 8, fontSize: 12.5, color: '#4A4A68', marginTop: 8, maxHeight: 110, overflowY: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
+                  {(() => {
+                    const skillsList = Object.values(candidate.skills || {}).flat();
+                    return `Hi ${candidate.name.split(' ')[0]},\n\nI hope this email finds you well.\n\nI came across your profile and was highly impressed by your background as a ${candidate.role} with expertise in ${skillsList.slice(0, 4).join(', ')}.\n\nWe have an exciting opportunity that matches your skills perfectly. Let me know if you would be open to a brief 10-minute chat this week to discuss details.\n\nLooking forward to hearing from you!\n\nBest regards,\nRahul\nEzHire Recruiting Team`;
+                  })()}
                 </div>
               </div>
 
@@ -2731,6 +2836,10 @@ export default function CandidateDatabase() {
             onBack={() => setView('candidates')}
             onDraftEmail={openDraftEmail}
             showToast={showToast}
+            onUpdateNotes={(newNotes) => {
+              setSelectedCandidate(prev => ({ ...prev, notes: newNotes }));
+              setCandidatesList(prev => prev.map(c => (c.id === selectedCandidate.id || c.candidate_uuid === selectedCandidate.candidate_uuid) ? { ...c, notes: newNotes } : c));
+            }}
           />
         )}
 
