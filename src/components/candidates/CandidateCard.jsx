@@ -231,25 +231,15 @@ export default function CandidateCard({ candidate, selected, onClick, onFavorite
             {title || "Candidate"}
           </div>
 
-          {/* Meta row: location + visa */}
-          {(location || visa) && (
+          {/* Meta row: visa only */}
+          {visa && (
             <div style={{ display: "flex", gap: 10, marginTop: 5, flexWrap: "wrap" }}>
-              {location && (
-                <span
-                  className="text-muted"
-                  style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 3 }}
-                >
-                  📍 {location}
-                </span>
-              )}
-              {visa && (
-                <span
-                  className="text-muted"
-                  style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 3 }}
-                >
-                  🛂 {visa}
-                </span>
-              )}
+              <span
+                className="text-muted"
+                style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 3 }}
+              >
+                🛂 {visa}
+              </span>
             </div>
           )}
         </div>

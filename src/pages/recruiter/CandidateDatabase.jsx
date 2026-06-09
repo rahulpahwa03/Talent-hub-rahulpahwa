@@ -1071,149 +1071,115 @@ function EzraPanel({ candidates, isOpen, onClose, onViewProfile, onDraftEmail, s
   }, [candidates]);
 
   async function getEzraResponse(userText) {
-    const OPENROUTER_KEY = import.meta.env.VITE_OPENROUTER_KEY;
-
-    // If no API key, fall back to keyword matching
-    if (!OPENROUTER_KEY) {
-      return getEzraResponseFallback(userText);
+    const text = userText.toLowerCase();
+    
+    // 1. Identify if they want to select or draft email for a specific candidate
+    let matchedCandidate = null;
+    for (const c of candidates) {
+      const cName = (c.name || "").toLowerCase();
+      if (text.includes(cName) || (cName.split(' ')[0] && text.includes(cName.split(' ')[0]))) {
+        matchedCandidate = c;
+        break;
+      }
     }
 
-    try {
-      const systemPrompt = `You are Ezra, an AI recruiting assistant for EzHire. You help recruiters navigate and manage their candidate database.
+    if (matchedCandidate) {
+      if (text.includes('email') || text.includes('draft') || text.includes('contact') || text.includes('outreach')) {
+        return {
+          text: `Certainly! I've opened the outreach email draft for ${matchedCandidate.name}.`,
+          action: `draftEmail:${matchedCandidate.id}`,
+          cards: [matchedCandidate.id]
+        };
+      }
+      return {
+        text: `Here is the profile details for ${matchedCandidate.name}.`,
+        action: `selectCandidate:${matchedCandidate.id}`,
+        cards: [matchedCandidate.id]
+      };
+    }
 
-Here is the current candidate database:
-${candidateContext}
+    // 2. Identify skills mentioned
+    const skillsList = [];
+    const allUniqueSkills = Array.from(new Set(candidates.flatMap(c => Object.values(c.skills || {}).flat())));
+    for (const skill of allUniqueSkills) {
+      if (text.includes(skill.toLowerCase())) {
+        skillsList.push(skill);
+      }
+    }
 
-AVAILABLE FILTERS ON UI:
-- statusFilter: "All", "Available Now", "Interview", "Offer", "Rejected", "Not Available"
-- visaFilter: "All", "USC", "GC", "H1B", "TN", "H4 EAD", "OPT"
-- workPref: "All", "Remote", "Hybrid", "Onsite"
-- expFilter: Number (minimum years of experience)
-- resumeFilter: "All", "With", "Without" (checks if they have a resume)
-- linkedinFilter: "All", "With", "Without" (checks if they have LinkedIn)
-- emailFilter: "All", "With", "Without" (checks if they have email)
-- phoneFilter: "All", "With", "Without" (checks if they have phone number)
+    // 3. Identify visa status mentioned
+    let visaMatch = null;
+    const visas = ["usc", "gc", "h1b", "tn", "h4 ead", "opt"];
+    for (const v of visas) {
+      if (text.includes(v)) {
+        visaMatch = v.toUpperCase();
+        break;
+      }
+    }
 
-RULES & ACTIONS YOU CAN INITIATE:
-1. Search & Filter: If the user wants to filter, search, or find specific criteria, include a JSON block at the end like:
-   <!-- APPLY_FILTERS:{"search":"optional query","visaFilter":"GC","resumeFilter":"With"} -->
-   Only specify the keys that need updating.
-2. Select Candidate: If the user asks for details about a candidate, select them on the screen by adding:
-   <!-- ACTION:selectCandidate:cand-X -->
-3. Draft Outreach Email: If the user asks to email or contact a candidate, add:
-   <!-- ACTION:draftEmail:cand-X -->
-4. Include card previews for matching candidates:
-   <!-- CARDS:["cand-1","cand-3"] -->
-5. Responses should be helpful and concise (2-3 sentences).
-6. Never make up candidate IDs or info not present in the database above.`;
+    // 4. Identify work preference
+    let workPrefMatch = null;
+    if (text.includes('remote')) workPrefMatch = 'Remote';
+    else if (text.includes('hybrid')) workPrefMatch = 'Hybrid';
+    else if (text.includes('onsite')) workPrefMatch = 'Onsite';
 
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${OPENROUTER_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'EzHire Recruiter Platform',
-        },
-        body: JSON.stringify({
-          model: 'openrouter/free',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...messages.filter(m => m.role === 'user' || m.role === 'ezra').slice(-6).map(m => ({
-              role: m.role === 'ezra' ? 'assistant' : 'user',
-              content: m.text,
-            })),
-            { role: 'user', content: userText },
-          ],
-          max_tokens: 400,
-          temperature: 0.3,
-        }),
+    // 5. Experience
+    let expMatch = null;
+    const expRegex = /(\d+)\+?\s*years?/;
+    const match = text.match(expRegex);
+    if (match) {
+      expMatch = parseInt(match[1]);
+    }
+
+    // 6. Perform actual filtering
+    let results = candidates;
+    if (skillsList.length > 0) {
+      results = results.filter(c => {
+        const cSkills = Object.values(c.skills || {}).flat().map(s => s.toLowerCase());
+        return skillsList.every(s => cSkills.includes(s.toLowerCase()));
       });
+    }
+    if (visaMatch) {
+      results = results.filter(c => c.visa?.toUpperCase() === visaMatch);
+    }
+    if (workPrefMatch) {
+      results = results.filter(c => c.workPref === workPrefMatch);
+    }
+    if (expMatch) {
+      results = results.filter(c => c.experience >= expMatch);
+    }
 
-      if (!response.ok) {
-        console.warn('OpenRouter API error:', response.status);
-        return getEzraResponseFallback(userText);
+    const matchedIds = results.slice(0, 3).map(c => c.id);
+
+    // Build responsive text
+    if (results.length > 0) {
+      let responseText = `I found ${results.length} candidate${results.length !== 1 ? 's' : ''} matching your search`;
+      const criteria = [];
+      if (skillsList.length > 0) criteria.push(`with skill(s): ${skillsList.join(', ')}`);
+      if (visaMatch) criteria.push(`under ${visaMatch} visa`);
+      if (workPrefMatch) criteria.push(`preferring ${workPrefMatch} work`);
+      if (expMatch) criteria.push(`with ${expMatch}+ years experience`);
+      
+      if (criteria.length > 0) {
+        responseText += ` ${criteria.join(' and ')}`;
       }
-
-      const data = await response.json();
-      const content = data?.choices?.[0]?.message?.content || '';
-
-      // Extract card IDs from <!-- CARDS:["cand-1","cand-2"] -->
-      let cards = null;
-      const cardsMatch = content.match(/<!--\s*CARDS:\s*(\[.*?\])\s*-->/);
-      if (cardsMatch) {
-        try { cards = JSON.parse(cardsMatch[1]); } catch(e) {}
-      }
-
-      // Extract action
-      let action = null;
-      const actionMatch = content.match(/<!--\s*ACTION:(\w+):([\w\-]+)\s*-->/);
-      if (actionMatch) {
-        action = `${actionMatch[1]}:${actionMatch[2]}`;
-      }
-
-      // Extract filters
-      let applyFilters = null;
-      const filterMatch = content.match(/<!--\s*APPLY_FILTERS:\s*(\{.*?\})\s*-->/);
-      if (filterMatch) {
-        try { applyFilters = JSON.parse(filterMatch[1]); } catch(e) {}
-      }
-
-      // Clean the visible text (remove HTML comments)
-      const cleanText = content.replace(/<!--.*?-->/g, '').trim();
-
+      responseText += `. I have updated the candidate list filters for you.`;
+      
       return {
-        text: cleanText || "I've searched your database but found no exact match. Try adjusting your query.",
-        cards,
-        action,
-        applyFilters
-      };
-    } catch (err) {
-      console.error('Ezra AI error:', err);
-      return getEzraResponseFallback(userText);
-    }
-  }
-
-  // Fallback keyword-based responses when API is unavailable
-  function getEzraResponseFallback(userText) {
-    const t = userText.toLowerCase();
-    if (t.includes('java') || t.includes('developer') || t.includes('available')) {
-      return {
-        text: 'Found 3 Java developers available right now. All open to remote or hybrid work.',
-        cards: ['cand-2', 'cand-5', 'cand-1'],
-        applyFilters: { search: 'Java', statusFilter: 'Available Now' }
+        text: responseText,
+        cards: matchedIds,
+        applyFilters: {
+          search: skillsList.join(' ') || undefined,
+          visaFilter: visaMatch || 'All',
+          workPref: workPrefMatch || 'All',
+          expFilter: expMatch || 0
+        }
       };
     }
-    if (t.includes('suresh')) {
-      return {
-        text: "Suresh Balakrishnan is a senior Cloud/Azure architect with 11 years experience, located in Austin, TX. I've highlighted his profile for you.",
-        cards: ['cand-1'],
-        action: 'selectCandidate:cand-1'
-      };
-    }
-    if (t.includes('h1b') || t.includes('texas') || t.includes('tx')) {
-      return {
-        text: 'Found H1B candidates in Texas. I have updated the filters to show H1B and Texas for you.',
-        cards: ['cand-2'],
-        applyFilters: { visaFilter: 'H1B', search: 'Texas' }
-      };
-    }
-    if (t.includes('resume') && (t.includes('no') || t.includes('without'))) {
-      return {
-        text: 'Filtering the grid to show candidates without a resume on file.',
-        applyFilters: { resumeFilter: 'Without' }
-      };
-    }
-    if (t.includes('draft') || t.includes('email') || t.includes('submission') || t.includes('outreach')) {
-      return {
-        text: "Opening outreach email composer now.",
-        cards: null,
-        action: 'draftEmail:cand-1',
-      };
-    }
+
     return {
-      text: "Got it. Let me search for candidates matching that criteria. Try being more specific — for example: 'Java developers in Texas with H1B' or 'senior cloud architects available now'.",
-      cards: null,
+      text: "I couldn't find any candidates matching those specific criteria in the database. Try adjusting your request or search terms (e.g. 'Java developers', 'H1B candidates', or asking for a candidate by name like 'Suresh').",
+      cards: null
     };
   }
 
@@ -1402,6 +1368,7 @@ function CandidateGridCard({ candidate, selected, onClick, onDraftEmail, onUploa
   const [isUploading, setIsUploading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
+    name: candidate.name || '',
     location: candidate.location || '',
     visa: candidate.visa || '',
     email: candidate.email || '',
@@ -1443,6 +1410,17 @@ function CandidateGridCard({ candidate, selected, onClick, onDraftEmail, onUploa
           <button className="btn-ghost sm" style={{ padding: 4 }} onClick={() => setIsEditing(false)}>Cancel</button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>Candidate Name</label>
+            <input
+              type="text"
+              value={editForm.name}
+              onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
+              placeholder="Candidate Name"
+              required
+            />
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>Email</label>
             <input
@@ -2293,6 +2271,7 @@ export default function CandidateDatabase() {
       }
 
       const mappedUpdate = {};
+      if (updatedFields.name !== undefined) mappedUpdate["Candidate Name"] = updatedFields.name;
       if (updatedFields.location !== undefined) mappedUpdate["Current Location"] = updatedFields.location;
       if (updatedFields.visa !== undefined) mappedUpdate["VISA"] = updatedFields.visa;
       if (updatedFields.email !== undefined) mappedUpdate["Email"] = updatedFields.email;
