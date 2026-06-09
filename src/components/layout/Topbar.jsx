@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Bell, Plus } from 'lucide-react';
+import { Search, Bell, Plus, Share2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 /* Derive a human-readable page title from the pathname */
 function getPageTitle(pathname) {
@@ -19,6 +20,12 @@ export default function Topbar() {
     if (e.key === 'Enter' && query.trim()) {
       navigate(`/recruiter/candidates?q=${encodeURIComponent(query.trim())}`);
     }
+  };
+
+  const handleCopyShareLink = () => {
+    const link = `${window.location.origin}/candidate/upload`;
+    navigator.clipboard.writeText(link);
+    toast.success('Shareable candidate portal link copied to clipboard!');
   };
 
   const pageTitle = getPageTitle(location.pathname);
@@ -47,6 +54,16 @@ export default function Topbar() {
 
       {/* ── Right: Actions ────────────────────────────────── */}
       <div className="flex items-center gap-2" style={{ flexShrink: 0 }}>
+        {/* Copy Share Link */}
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={handleCopyShareLink}
+          title="Copy shareable link for candidates to upload resumes"
+        >
+          <Share2 size={13} strokeWidth={2.2} />
+          Share Link
+        </button>
+
         {/* New Candidate */}
         <button
           className="btn btn-primary btn-sm"
