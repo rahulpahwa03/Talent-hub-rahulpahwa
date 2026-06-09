@@ -1015,10 +1015,6 @@ function InlineCandidateCard({ candidate, onViewProfile, onDraftEmail }) {
 
       {/* Row 2 — Meta */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, color: '#6B6B8A', display: 'flex', alignItems: 'center', gap: 3 }}>
-          <svg width="11" height="11" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeWidth="2" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7Z"/><circle cx="12" cy="9" r="2.5" stroke="currentColor" strokeWidth="2"/></svg>
-          {candidate.location}
-        </span>
         <span style={{ fontSize: 11, fontWeight: 500, background: '#F0EEFF', color: '#5B4FCC', borderRadius: 20, padding: '2px 8px' }}>{candidate.visa}</span>
       </div>
 
@@ -1534,10 +1530,6 @@ function CandidateGridCard({ candidate, selected, onClick, onDraftEmail, onUploa
       {/* Meta details */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, fontSize: 12, color: '#1A1A2E' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontWeight: 500, color: '#6B6B8A', width: 65 }}>📍 Location:</span>
-          <span style={{ color: candidate.location ? '#1A1A2E' : '#EF4444', fontStyle: candidate.location ? 'normal' : 'italic' }}>{candidate.location || "Not Available"}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontWeight: 500, color: '#6B6B8A', width: 65 }}>🛂 Visa:</span>
           <span style={{ color: candidate.visa ? '#1A1A2E' : '#EF4444', fontStyle: candidate.visa ? 'normal' : 'italic' }}>{candidate.visa || "Not Available"}</span>
         </div>
@@ -1919,7 +1911,7 @@ function CandidatesPanel({
           className="ez-input"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search candidates, skills, location..."
+          placeholder="Search candidates, skills..."
           style={{ flex: 1 }}
         />
         <button
@@ -2504,7 +2496,7 @@ export default function CandidateDatabase() {
       // Apply server-side filters if we have filters set
       if (search.trim()) {
         const term = `%${search.trim()}%`;
-        query = query.or(`"Candidate Name".ilike.${term},Title.ilike.${term},"Current Location".ilike.${term},Skills.ilike.${term}`);
+        query = query.or(`"Candidate Name".ilike.${term},Title.ilike.${term},Skills.ilike.${term}`);
       }
       if (statusFilter !== 'All') {
         query = query.eq('status', statusFilter);
@@ -2559,7 +2551,7 @@ export default function CandidateDatabase() {
 
       if (search.trim()) {
         const term = `%${search.trim()}%`;
-        countQuery = countQuery.or(`"Candidate Name".ilike.${term},Title.ilike.${term},"Current Location".ilike.${term},Skills.ilike.${term}`);
+        countQuery = countQuery.or(`"Candidate Name".ilike.${term},Title.ilike.${term},Skills.ilike.${term}`);
       }
       if (statusFilter !== 'All') countQuery = countQuery.eq('status', statusFilter);
       if (visaFilter !== 'All') countQuery = countQuery.eq('VISA', visaFilter);
