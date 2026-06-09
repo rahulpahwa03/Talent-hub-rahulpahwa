@@ -14,11 +14,9 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
 
-// ─── PDF.js worker ─────────────────────────────────────────────────────────────
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString();
+// ─── PDF.js worker (uses CDN for reliable Vite/production bundling) ───────────
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version || '6.0.227'}/build/pdf.worker.min.mjs`;
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TEXT EXTRACTION
