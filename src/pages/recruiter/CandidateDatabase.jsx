@@ -2256,16 +2256,18 @@ export default function CandidateDatabase() {
 
   const handleUpdateCandidateFields = async (candidate, updatedFields) => {
     try {
-      if (!supabase) {
-        setCandidatesList(prev => prev.map(c => {
-          if (c.id === candidate.id) {
-            return { ...c, ...updatedFields };
-          }
-          return c;
-        }));
-        if (selectedCandidate && selectedCandidate.id === candidate.id) {
-          setSelectedCandidate(prev => ({ ...prev, ...updatedFields }));
+      // Update local state immediately for instant UI feedback
+      setCandidatesList(prev => prev.map(c => {
+        if (c.id === candidate.id) {
+          return { ...c, ...updatedFields };
         }
+        return c;
+      }));
+      if (selectedCandidate && selectedCandidate.id === candidate.id) {
+        setSelectedCandidate(prev => ({ ...prev, ...updatedFields }));
+      }
+
+      if (!supabase) {
         showToast("Candidate fields updated locally! (Supabase not configured)", "success");
         return;
       }
@@ -2282,16 +2284,12 @@ export default function CandidateDatabase() {
       const { error: dbErr } = await supabase
         .from("candidates")
         .update(mappedUpdate)
-        .or(`id.eq.${candidate.id},Email.eq.${candidate.email}`);
+        .or(`id.eq.${candidate.id},candidate_uuid.eq.${candidate.id},Email.eq.${candidate.email}`);
 
       if (dbErr) throw dbErr;
 
       showToast("Candidate details updated successfully!", "success");
       await loadCandidates();
-
-      if (selectedCandidate && selectedCandidate.id === candidate.id) {
-        setSelectedCandidate(prev => ({ ...prev, ...updatedFields }));
-      }
     } catch (err) {
       console.error("[CandidateDatabase] Details update error:", err);
       showToast(err.message || "Failed to update candidate details.", "error");
