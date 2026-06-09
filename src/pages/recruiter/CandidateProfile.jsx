@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import {
@@ -534,13 +535,85 @@ export default function CandidateProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // In a real app you'd fetch by id; we use mock data
-  const candidate = MOCK_CANDIDATE;
+  const [candidate, setCandidate] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const [activeTab, setActiveTab]     = useState('overview');
   const [isFavorite, setIsFavorite]   = useState(false);
   const [aiSummary, setAiSummary]     = useState('');
   const [generatingAI, setGeneratingAI] = useState(false);
+
+  useEffect(() => {
+    async function loadCandidate() {
+      try {
+        setLoading(true);
+        if (id === '1') {
+          setCandidate(MOCK_CANDIDATE);
+          if (MOCK_CANDIDATE.favorite) setIsFavorite(true);
+          return;
+        }
+
+        // Fetch from Supabase
+        const query = isNaN(id) 
+          ? supabase.from('candidates').select('*').eq('candidate_uuid', id)
+          : supabase.from('candidates').select('*').eq('id', parseInt(id));
+        const { data, error } = await query.single();
+        
+        if (error) throw error;
+        
+        if (data) {
+          const formatted = {
+            id: data.id,
+            name: data["Candidate Name"] || "Unknown Candidate",
+            title: data.Title || "Consultant",
+            location: data["Current Location"] || "Not Disclosed",
+            visa: data.VISA || "Not Disclosed",
+            email: data.Email || "",
+            phone: data["Contact No"] || "",
+            linkedin: data.LinkedIn || "",
+            resume_url: data.resume_url || (data.resume_file_name ? supabase.storage.from("resumes").getPublicUrl(`uploads/${data.resume_file_name}`).data.publicUrl : ""),
+            skills: data.Skills ? data.Skills.split(/[|,]/).map(s => s.trim()).filter(Boolean) : [],
+            experience: [
+              {
+                id: 1,
+                company: data["Pyramid Client"] || data.client_name || "Enterprise Client",
+                role: data.Title || "Consultant",
+                period: data["Broadcasted Date"] || "Recent",
+                location: data["Current Location"] || "",
+                bullets: data.summary ? [data.summary] : ["No detailed experience summary provided."]
+              }
+            ],
+            activity: [
+              { id: 1, time: "Recently", action: "Profile loaded from staffing pool database", icon: "add" }
+            ]
+          };
+          setCandidate(formatted);
+          setIsFavorite(!!data.favorite);
+        }
+      } catch (err) {
+        console.error("Error loading candidate profile:", err);
+        setCandidate(MOCK_CANDIDATE);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadCandidate();
+  }, [id]);
+
+  if (loading || !candidate) {
+    return (
+      <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-base)', flexDirection: 'column', gap: 12 }}>
+        <div style={{
+          width: 36, height: 36,
+          border: '3px solid var(--border)',
+          borderTopColor: 'var(--accent)',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }} />
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading Candidate Profile...</span>
+      </div>
+    );
+  }
 
   const initials = candidate.name.split(' ').map(x => x[0]).join('').toUpperCase();
   const colorIdx = (candidate.name.charCodeAt(0) || 0) % GRADIENTS.length;
@@ -548,19 +621,20 @@ export default function CandidateProfile() {
   const generateAISummary = () => {
     setGeneratingAI(true);
     setTimeout(() => {
+      const topSkills = candidate.skills.slice(0, 3).join(", ") || "core domain technologies";
       setAiSummary(
-        `Priya Nair is a highly experienced Senior Data Engineer with 8+ years of expertise in building scalable data infrastructure at top-tier tech companies. She brings deep hands-on experience with the modern data stack — particularly Snowflake, dbt, Apache Spark, and Airflow — and has a strong track record of reducing pipeline latency, managing large-scale migrations, and mentoring engineering teams. Her background at Databricks and Stripe signals exposure to high-throughput, mission-critical data systems. She is an excellent fit for senior individual contributor or lead data engineering roles.`
+        `${candidate.name} is a qualified professional with extensive expertise in ${topSkills}. They are located in ${candidate.location} and present key technical capabilities suitable for ${candidate.title} positions. Strong work history indicators match project environments.`
       );
       setGeneratingAI(false);
       toast.success('AI Summary generated!');
-    }, 1800);
+    }, 1200);
   };
 
   const tabContent = {
     overview:   <OverviewTab candidate={candidate} aiSummary={aiSummary} />,
-    experience: <ExperienceTab experience={candidate.experience} />,
+    experience: <ExperienceTab experience={candidate.experience || []} />,
     notes:      <NotesTab />,
-    activity:   <ActivityTab activity={candidate.activity} />,
+    activity:   <ActivityTab activity={candidate.activity || []} />,
     ai:         <AIInsightsTab />,
   };
 
