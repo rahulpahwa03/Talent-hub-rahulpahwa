@@ -720,7 +720,7 @@ export default function RecruiterDashboard({ activeTab }) {
   return (
     <div
       style={{
-        minHeight: "calc(100vh - 56px)",
+        height: "calc(100vh - 56px)",
         background: "var(--bg-soft)",
         display: "flex",
         flexDirection: "column",
