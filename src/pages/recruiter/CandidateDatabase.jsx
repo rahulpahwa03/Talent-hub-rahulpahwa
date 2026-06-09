@@ -875,7 +875,7 @@ function BulkParseModal({ isOpen, onClose, onSave, showToast }) {
         setFiles(prev => prev.map((f, i) => i === idx ? { ...f, progress: 75 } : f));
         const parsed = parseResumeText(rawText, fileData.name);
         
-        setFiles(prev => prev.map((f, i) => i === idx ? { ...f, status: 'done', progress: 100, result: parsed } : f));
+        setFiles(prev => prev.map((f, i) => i === idx ? { ...f, status: 'done', progress: 100, result: parsed, rawText } : f));
       } catch (err) {
         setFiles(prev => prev.map((f, i) => i === idx ? { ...f, status: 'error', progress: 100, errorMsg: err.message || 'Parsing error' } : f));
       }
@@ -887,6 +887,7 @@ function BulkParseModal({ isOpen, onClose, onSave, showToast }) {
     const parsedCandidates = files
       .filter(f => f.status === 'done' && f.result)
       .map(f => ({
+        file: f.file,
         name: f.result.name || f.name.replace(/\.[^/.]+$/, ""),
         role: f.result.title || "Software Engineer",
         location: f.result.location || "Remote",
@@ -896,7 +897,8 @@ function BulkParseModal({ isOpen, onClose, onSave, showToast }) {
         phone: f.result.phone || "",
         linkedin: f.result.linkedin || "",
         summary: f.result.summary || "",
-        skills: f.result.skills || []
+        skills: f.result.skills || [],
+        rawText: f.rawText || ""
       }));
 
     if (parsedCandidates.length === 0) {
@@ -2221,25 +2223,28 @@ export default function CandidateDatabase() {
   const handleSaveParsedBulk = async (parsedProfiles) => {
     try {
       if (!supabase) {
-        const newLocalCandidates = parsedProfiles.map((p, index) => ({
-          id: `bulk-${Date.now()}-${index}`,
-          name: p.name,
-          role: p.role,
-          status: "Available Now",
-          location: p.location,
-          visa: p.visa,
-          experience: Number(p.experience) || 5,
-          workPref: "Remote",
-          availableFrom: "Immediately",
-          email: p.email,
-          phone: p.phone,
-          linkedin: p.linkedin,
-          resume_url: "",
-          summary: p.summary || `${p.name} is an experienced professional in this field.`,
-          skills: { All: p.skills || [] },
-          history: [],
-          submissions: []
-        }));
+        const newLocalCandidates = parsedProfiles.map((p, index) => {
+          const fakeUrl = p.file ? URL.createObjectURL(p.file) : "";
+          return {
+            id: `bulk-${Date.now()}-${index}`,
+            name: p.name,
+            role: p.role,
+            status: "Available Now",
+            location: p.location,
+            visa: p.visa,
+            experience: Number(p.experience) || 5,
+            workPref: "Remote",
+            availableFrom: "Immediately",
+            email: p.email,
+            phone: p.phone,
+            linkedin: p.linkedin,
+            resume_url: fakeUrl,
+            summary: p.summary || `${p.name} is an experienced professional in this field.`,
+            skills: { All: p.skills || [] },
+            history: [],
+            submissions: []
+          };
+        });
         setCandidatesList(prev => [...newLocalCandidates, ...prev]);
         showToast(`Locally saved ${parsedProfiles.length} candidate profiles!`, "success");
         return;
@@ -2248,6 +2253,37 @@ export default function CandidateDatabase() {
       let successCount = 0;
       for (const p of parsedProfiles) {
         try {
+          let resumeUrl = "";
+          let resumeFileName = "";
+
+          if (p.file) {
+            const slug = (p.name || "candidate")
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "");
+            const ts = Date.now();
+            const ext = p.file.name.split(".").pop().toLowerCase();
+            resumeFileName = `${slug}_${ts}.${ext}`;
+            const path = `uploads/${resumeFileName}`;
+
+            const { error: uploadErr } = await supabase.storage
+              .from("resumes")
+              .upload(path, p.file, {
+                cacheControl: "3600",
+                upsert: false,
+                contentType: p.file.type || "application/octet-stream",
+              });
+
+            if (!uploadErr) {
+              const { data: urlData } = supabase.storage
+                .from("resumes")
+                .getPublicUrl(path);
+              resumeUrl = urlData?.publicUrl || "";
+            } else {
+              console.error("Storage upload failed in bulk parsing:", uploadErr.message);
+            }
+          }
+
           const { error } = await supabase.rpc('insert_candidate', {
             p_name: p.name,
             p_email: p.email,
@@ -2259,6 +2295,9 @@ export default function CandidateDatabase() {
             p_skills: p.skills.join(', '),
             p_experience: String(p.experience),
             p_summary: p.summary,
+            p_resume_url: resumeUrl,
+            p_resume_file: p.file ? p.file.name : "",
+            p_resume_text: (p.rawText || '').slice(0, 50000),
             p_source: 'bulk_parsing'
           });
           if (!error) successCount++;
