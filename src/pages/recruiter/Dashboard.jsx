@@ -271,6 +271,10 @@ export default function RecruiterDashboard({ activeTab }) {
   const [editingCandidateFile, setEditingCandidateFile] = useState(null);
   const [savingCandidate, setSavingCandidate] = useState(false);
 
+  // View Mode: 'directory' or 'swipe'
+  const [viewMode, setViewMode] = useState("directory");
+  const [swipeIndex, setSwipeIndex] = useState(0);
+
   // Analytics Tab period
   const [analyticsPeriod, setAnalyticsPeriod] = useState("30d");
 
@@ -448,6 +452,17 @@ export default function RecruiterDashboard({ activeTab }) {
       skills: keywords.filter(k => k !== 'engineers' && k !== 'developer' && k !== 'senior').slice(0, 2),
     }));
     toast.success("AI search filters applied!");
+  };
+
+  // Tinder Swipe gesture handler
+  const handleSwipe = (direction, cand) => {
+    if (direction === "right") {
+      handleToggleFavorite(cand);
+      toast.success(`Shortlisted ${cand['Candidate Name']}`);
+    } else {
+      toast.success(`Skipped ${cand['Candidate Name']}`);
+    }
+    setSwipeIndex(prev => prev + 1);
   };
 
   // Copy all candidate emails currently loaded in list in bulk
@@ -958,6 +973,24 @@ export default function RecruiterDashboard({ activeTab }) {
                       />
                     </div>
 
+                    <div style={{ display: "flex", background: "var(--bg-muted)", borderRadius: "var(--radius-md)", padding: 2, marginRight: 8 }}>
+                      <button
+                        className={`btn ${viewMode === "directory" ? "btn-primary" : "btn-ghost"} btn-sm`}
+                        onClick={() => setViewMode("directory")}
+                        style={{ padding: "4px 10px", fontSize: 11.5, borderRadius: "6px" }}
+                      >
+                        List View
+                      </button>
+                      <button
+                        className={`btn ${viewMode === "swipe" ? "btn-primary" : "btn-ghost"} btn-sm`}
+                        onClick={() => { setViewMode("swipe"); setSwipeIndex(0); }}
+                        style={{ padding: "4px 10px", fontSize: 11.5, display: "flex", gap: 4, alignItems: "center", borderRadius: "6px" }}
+                      >
+                        <Zap size={11} />
+                        AI Swipe
+                      </button>
+                    </div>
+
                     <select
                       className="input"
                       style={{ width: 140 }}
@@ -988,275 +1021,525 @@ export default function RecruiterDashboard({ activeTab }) {
                     </button>
                   </div>
 
-                  {/* Candidates Cards roster: Long full-width cards stack */}
-                  <div style={{ flex: 1, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
-                    {loading ? (
-                      <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
-                        <Loader2 size={32} style={{ animation: "spin 1s linear infinite" }} />
-                      </div>
-                    ) : processedCandidates.length === 0 ? (
-                      <div className="empty-state">
-                        <Info size={32} />
-                        <p>No candidates match your filters.</p>
-                      </div>
-                    ) : (
-                      processedCandidates.map((cand) => {
-                        const colorInfo = getModernAvatar(cand['Candidate Name']);
-                        const score = getMatchScore(cand, searchVal);
-                        const rate = getPredictedRate(cand);
-                        const isExpanded = expandedCandidateId === cand.id;
-
-                        // Unified Resume lookup
-                        const cardResumeUrl = (cand.resume_url || cand['Resume URL'] || cand['Resume'] || '').trim() || 
-                                              (cand.resume_file_name ? supabase.storage.from("resumes").getPublicUrl(`uploads/${cand.resume_file_name}`).data.publicUrl : "");
-                        const hasResume = !!(cardResumeUrl || (cand.resume_text && cand.resume_text.trim().length > 10));
-
-                        return (
-                          <div
-                            key={cand.id}
-                            className={`card ${isExpanded ? "selected" : ""}`}
+                  {/* Candidates Cards roster or Tinder Swipe Workspace */}
+                  <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                    {viewMode === "swipe" ? (
+                      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, background: "var(--bg-soft)", overflowY: "auto" }}>
+                        {loading ? (
+                          <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
+                            <Loader2 size={32} style={{ animation: "spin 1s linear infinite" }} />
+                          </div>
+                        ) : processedCandidates.slice(swipeIndex).length === 0 ? (
+                          <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="card"
                             style={{
+                              maxWidth: 420,
+                              width: "100%",
+                              padding: 32,
+                              textAlign: "center",
                               display: "flex",
                               flexDirection: "column",
-                              padding: 0,
-                              cursor: "pointer",
-                              borderLeft: score > 90 ? "4px solid #6C5CE7" : "1px solid var(--border)",
-                              boxShadow: "var(--shadow-sm)",
-                              borderRadius: "var(--radius-lg)",
-                              overflow: "hidden",
-                              transition: "all 0.2s ease-in-out",
+                              alignItems: "center",
+                              gap: 18,
+                              boxShadow: "var(--shadow-lg)",
+                              borderRadius: "20px",
                             }}
-                            onClick={() => setExpandedCandidateId(isExpanded ? null : cand.id)}
                           >
-                            {/* Top Collapsed Row (CSS Grid to prevent overlapping and layout wrapping) */}
-                            <div style={{ 
-                              display: "grid", 
-                              gridTemplateColumns: "280px 180px 1fr 180px", 
-                              alignItems: "center", 
-                              padding: "16px 24px", 
-                              gap: 16,
-                              minHeight: 88,
-                            }}>
-                              
-                              {/* Left Column: Avatar + Name + Title + Email Quick Copy */}
-                              <div style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
-                                <div
-                                  className="avatar avatar-md"
-                                  style={{
-                                    background: colorInfo.bg,
-                                    color: colorInfo.text,
-                                    border: `1px solid ${colorInfo.border}`,
-                                    width: 42, height: 42, fontSize: 14,
-                                    fontWeight: 700,
-                                    borderRadius: "10px",
-                                    flexShrink: 0,
-                                  }}
-                                >
-                                  {cand['Candidate Name'] ? cand['Candidate Name'].split(' ').slice(0, 2).map(n => n[0]).join('') : "?"}
+                            <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#F0FDF4", color: "#16A34A", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <CheckCircle2 size={32} />
+                            </div>
+                            <div>
+                              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>AI Swipe Completed</h3>
+                              <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 6, lineHeight: 1.5 }}>
+                                You've swiped through all filtered candidates. Total reviewed in this session: {processedCandidates.length}.
+                              </p>
+                            </div>
+                            <div style={{ display: "flex", gap: 10, width: "100%" }}>
+                              <button
+                                className="btn btn-secondary btn-full"
+                                onClick={() => { setSwipeIndex(0); }}
+                              >
+                                Start Over
+                              </button>
+                              <button
+                                className="btn btn-primary btn-full"
+                                onClick={() => setViewMode("directory")}
+                              >
+                                Go to List View
+                              </button>
+                            </div>
+                          </motion.div>
+                        ) : (
+                          (() => {
+                            const cand = processedCandidates.slice(swipeIndex)[0];
+                            const colorInfo = getModernAvatar(cand['Candidate Name']);
+                            const score = getMatchScore(cand, searchVal);
+                            const rate = getPredictedRate(cand);
+                            
+                            const cardResumeUrl = (cand.resume_url || cand['Resume URL'] || cand['Resume'] || '').trim() || 
+                                                  (cand.resume_file_name ? supabase.storage.from("resumes").getPublicUrl(`uploads/${cand.resume_file_name}`).data.publicUrl : "");
+                            const hasResume = !!(cardResumeUrl || (cand.resume_text && cand.resume_text.trim().length > 10));
+
+                            return (
+                              <motion.div
+                                key={cand.id}
+                                drag="x"
+                                dragConstraints={{ left: 0, right: 0 }}
+                                onDragEnd={(e, info) => {
+                                  if (info.offset.x > 140) {
+                                    handleSwipe("right", cand);
+                                  } else if (info.offset.x < -140) {
+                                    handleSwipe("left", cand);
+                                  }
+                                }}
+                                style={{
+                                  width: "100%",
+                                  maxWidth: 480,
+                                  boxShadow: "var(--shadow-xl)",
+                                  borderRadius: 24,
+                                  background: "var(--bg)",
+                                  border: "1px solid var(--border)",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  overflow: "hidden",
+                                  cursor: "grab",
+                                  position: "relative",
+                                }}
+                                whileActive={{ cursor: "grabbing" }}
+                              >
+                                {/* AI Match badge indicator absolute corner */}
+                                <div style={{
+                                  position: "absolute",
+                                  right: 20,
+                                  top: 20,
+                                  background: "#F5F3FF",
+                                  border: "1px solid #D8B4FE",
+                                  color: "#7C3AED",
+                                  padding: "6px 12px",
+                                  borderRadius: 99,
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 5,
+                                  boxShadow: "var(--shadow-sm)",
+                                  zIndex: 10,
+                                }}>
+                                  <Zap size={12} fill="#7C3AED" />
+                                  {score}% Match
                                 </div>
-                                <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-                                  <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                    {cand['Candidate Name']}
-                                  </h4>
-                                  <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                    {cand['Title'] || "Technical Consultant"}
-                                  </p>
-                                  {cand['Email'] && (
-                                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} onClick={e => e.stopPropagation()}>
-                                      <span 
-                                        onClick={() => {
-                                          navigator.clipboard.writeText(cand['Email']);
-                                          toast.success("Email copied");
-                                        }}
-                                        style={{ cursor: "pointer", textDecoration: "underline" }}
-                                        title="Click to copy email"
-                                      >
-                                        {cand['Email']}
+
+                                {/* Top Profile Card Header info */}
+                                <div style={{ padding: "30px 24px 20px", borderBottom: "1px solid var(--border-soft)", display: "flex", gap: 16, alignItems: "center" }}>
+                                  <div
+                                    style={{
+                                      background: colorInfo.bg,
+                                      color: colorInfo.text,
+                                      border: `1px solid ${colorInfo.border}`,
+                                      width: 60, height: 60, fontSize: 18,
+                                      fontWeight: 700,
+                                      borderRadius: 16,
+                                      display: "flex", alignItems: "center", justifyContent: "center",
+                                    }}
+                                  >
+                                    {cand['Candidate Name'] ? cand['Candidate Name'].split(' ').slice(0, 2).map(n => n[0]).join('') : "?"}
+                                  </div>
+                                  <div style={{ minWidth: 0 }}>
+                                    <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{cand['Candidate Name']}</h3>
+                                    <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: "4px 0 0", fontWeight: 500 }}>
+                                      {cand['Title'] || "Technical Consultant"}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Body stats content scrollable area */}
+                                <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, maxHeight: "45vh", overflowY: "auto" }}>
+                                  
+                                  {/* Badges strip */}
+                                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                    {cand['VISA'] && <span className="badge badge-blue" style={{ fontSize: 11, padding: "4px 10px" }}>🛂 {cand['VISA']}</span>}
+                                    {cand.experience && <span className="badge badge-gray" style={{ fontSize: 11, padding: "4px 10px" }}>💼 {cand.experience} yrs exp</span>}
+                                    <span className="badge badge-amber" style={{ fontSize: 11, padding: "4px 10px", display: "flex", gap: 3, alignItems: "center" }}>
+                                      <DollarSign size={11} /> {rate}
+                                    </span>
+                                  </div>
+
+                                  {/* Ezra AI Summary Box */}
+                                  <div style={{ padding: 14, background: "#F5F3FF", border: "1px solid #C4B5FD", borderRadius: 12 }}>
+                                    <p style={{ fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: "#7C3AED", margin: "0 0 6px" }}>
+                                      Ezra AI Summary Insights
+                                    </p>
+                                    <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
+                                      {cand['Candidate Name']} matches at {score}% based on their experience working with {cand.Skills?.split(/[|,]/).slice(0, 3).join(', ')}. Strong capability predicted.
+                                    </p>
+                                  </div>
+
+                                  {/* Skills */}
+                                  <div>
+                                    <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", margin: "0 0 8px" }}>Key Skills</p>
+                                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                      {(cand['Skills'] || "").split(/[|,]/).map((s, i) => (
+                                        <span key={i} className="tag" style={{ fontSize: 11, padding: "4px 10px" }}>{s.trim()}</span>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Profile summary */}
+                                  <div>
+                                    <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", margin: "0 0 8px" }}>Profile Bio</p>
+                                    <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
+                                      {cand.summary || "No professional biography on file."}
+                                    </p>
+                                  </div>
+
+                                  {/* Recruiter notes textbox inside swipe card */}
+                                  <div>
+                                    <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", margin: "0 0 6px" }}>Swipe Notes</p>
+                                    <textarea
+                                      rows={2}
+                                      className="input"
+                                      placeholder="Add notes for this candidate..."
+                                      defaultValue={cand.notes || ""}
+                                      onBlur={(e) => handleNoteSave(cand, e.target.value)}
+                                      style={{ fontSize: 12, resize: "none" }}
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Swiper card action buttons footer */}
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", background: "var(--bg-soft)", borderTop: "1px solid var(--border-soft)" }}>
+                                  
+                                  {/* Red Skip Swipe Left button */}
+                                  <button
+                                    className="btn btn-secondary"
+                                    onClick={() => handleSwipe("left", cand)}
+                                    style={{
+                                      width: 48, height: 48, borderRadius: "50%",
+                                      display: "flex", alignItems: "center", justifyContent: "center",
+                                      color: "#EF4444", background: "#FFFFFF", border: "1px solid #FEE2E2",
+                                      boxShadow: "var(--shadow-md)",
+                                      padding: 0,
+                                    }}
+                                    title="Skip Candidate (Swipe Left)"
+                                  >
+                                    <X size={20} strokeWidth={2.5} />
+                                  </button>
+
+                                  {/* Blue Resume Document button */}
+                                  {hasResume ? (
+                                    <button
+                                      className="btn btn-secondary"
+                                      onClick={() => setResumePreviewUrl(cardResumeUrl)}
+                                      style={{
+                                        display: "flex", gap: 6, alignItems: "center",
+                                        padding: "8px 16px", borderRadius: "10px",
+                                        background: "#FFFFFF",
+                                        fontWeight: 600,
+                                        fontSize: 13,
+                                      }}
+                                    >
+                                      <FileText size={16} color="#3B82F6" />
+                                      View Resume
+                                    </button>
+                                  ) : (
+                                    <span style={{ fontSize: 12, color: "var(--text-muted)" }}>No Resume Attached</span>
+                                  )}
+
+                                  {/* Green Shortlist Swipe Right button */}
+                                  <button
+                                    className="btn btn-secondary"
+                                    onClick={() => handleSwipe("right", cand)}
+                                    style={{
+                                      width: 48, height: 48, borderRadius: "50%",
+                                      display: "flex", alignItems: "center", justifyContent: "center",
+                                      color: "#10B981", background: "#FFFFFF", border: "1px solid #D1FAE5",
+                                      boxShadow: "var(--shadow-md)",
+                                      padding: 0,
+                                    }}
+                                    title="Shortlist Candidate (Swipe Right)"
+                                  >
+                                    <Heart size={20} fill="#10B981" strokeWidth={2.5} />
+                                  </button>
+
+                                </div>
+                              </motion.div>
+                            );
+                          })()
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
+                        {loading ? (
+                          <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
+                            <Loader2 size={32} style={{ animation: "spin 1s linear infinite" }} />
+                          </div>
+                        ) : processedCandidates.length === 0 ? (
+                          <div className="empty-state">
+                            <Info size={32} />
+                            <p>No candidates match your filters.</p>
+                          </div>
+                        ) : (
+                          processedCandidates.map((cand) => {
+                            const colorInfo = getModernAvatar(cand['Candidate Name']);
+                            const score = getMatchScore(cand, searchVal);
+                            const rate = getPredictedRate(cand);
+                            const isExpanded = expandedCandidateId === cand.id;
+
+                            // Unified Resume lookup
+                            const cardResumeUrl = (cand.resume_url || cand['Resume URL'] || cand['Resume'] || '').trim() || 
+                                                  (cand.resume_file_name ? supabase.storage.from("resumes").getPublicUrl(`uploads/${cand.resume_file_name}`).data.publicUrl : "");
+                            const hasResume = !!(cardResumeUrl || (cand.resume_text && cand.resume_text.trim().length > 10));
+
+                            return (
+                              <div
+                                key={cand.id}
+                                className={`card ${isExpanded ? "selected" : ""}`}
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  padding: 0,
+                                  cursor: "pointer",
+                                  borderLeft: score > 90 ? "4px solid #6C5CE7" : "1px solid var(--border)",
+                                  boxShadow: "var(--shadow-sm)",
+                                  borderRadius: "var(--radius-lg)",
+                                  overflow: "hidden",
+                                  transition: "all 0.2s ease-in-out",
+                                }}
+                                onClick={() => setExpandedCandidateId(isExpanded ? null : cand.id)}
+                              >
+                                {/* Top Collapsed Row (CSS Grid to prevent overlapping and layout wrapping) */}
+                                <div style={{ 
+                                  display: "grid", 
+                                  gridTemplateColumns: "280px 180px 1fr 180px", 
+                                  alignItems: "center", 
+                                  padding: "16px 24px", 
+                                  gap: 16,
+                                  minHeight: 88,
+                                }}>
+                                  
+                                  {/* Left Column: Avatar + Name + Title + Email Quick Copy */}
+                                  <div style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
+                                    <div
+                                      className="avatar avatar-md"
+                                      style={{
+                                        background: colorInfo.bg,
+                                        color: colorInfo.text,
+                                        border: `1px solid ${colorInfo.border}`,
+                                        width: 42, height: 42, fontSize: 14,
+                                        fontWeight: 700,
+                                        borderRadius: "10px",
+                                        flexShrink: 0,
+                                      }}
+                                    >
+                                      {cand['Candidate Name'] ? cand['Candidate Name'].split(' ').slice(0, 2).map(n => n[0]).join('') : "?"}
+                                    </div>
+                                    <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                                      <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                        {cand['Candidate Name']}
+                                      </h4>
+                                      <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                        {cand['Title'] || "Technical Consultant"}
+                                      </p>
+                                      {cand['Email'] && (
+                                        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} onClick={e => e.stopPropagation()}>
+                                          <span 
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(cand['Email']);
+                                              toast.success("Email copied");
+                                            }}
+                                            style={{ cursor: "pointer", textDecoration: "underline" }}
+                                            title="Click to copy email"
+                                          >
+                                            {cand['Email']}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Middle Column: AI Match, Salary and Visa Status */}
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                                      {cand['VISA'] && <span className="badge badge-blue" style={{ fontSize: 9.5, padding: "2px 6px" }}>{cand['VISA']}</span>}
+                                      {cand.experience && <span className="badge badge-gray" style={{ fontSize: 9.5, padding: "2px 6px" }}>{cand.experience} yrs</span>}
+                                    </div>
+                                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                                      <span className="badge badge-amber" style={{ display: "flex", gap: 2, alignItems: "center", fontSize: 9.5, padding: "2px 6px" }}>
+                                        <DollarSign size={9} />
+                                        {rate.split(' / ')[0]}
+                                      </span>
+                                      <span className="badge badge-green" style={{ display: "flex", gap: 2, alignItems: "center", fontWeight: 700, fontSize: 9.5, padding: "2px 6px" }}>
+                                        <Zap size={9} />
+                                        {score}% Match
                                       </span>
                                     </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Middle Column: AI Match, Salary and Visa Status */}
-                              <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-                                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                                  {cand['VISA'] && <span className="badge badge-blue" style={{ fontSize: 9.5, padding: "2px 6px" }}>{cand['VISA']}</span>}
-                                  {cand.experience && <span className="badge badge-gray" style={{ fontSize: 9.5, padding: "2px 6px" }}>{cand.experience} yrs</span>}
-                                </div>
-                                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                                  <span className="badge badge-amber" style={{ display: "flex", gap: 2, alignItems: "center", fontSize: 9.5, padding: "2px 6px" }}>
-                                    <DollarSign size={9} />
-                                    {rate.split(' / ')[0]}
-                                  </span>
-                                  <span className="badge badge-green" style={{ display: "flex", gap: 2, alignItems: "center", fontWeight: 700, fontSize: 9.5, padding: "2px 6px" }}>
-                                    <Zap size={9} />
-                                    {score}% Match
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Skills Column */}
-                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", minWidth: 0 }}>
-                                {(cand['Skills'] || "").split(/[|,]/).slice(0, 3).map((s, idx) => (
-                                  <span key={idx} className="tag" style={{ fontSize: 10, padding: "2px 6px", background: "var(--bg-muted)", border: "1px solid var(--border-soft)", whiteSpace: "nowrap" }}>{s.trim()}</span>
-                                ))}
-                                {(cand['Skills'] || "").split(/[|,]/).length > 3 && (
-                                  <span className="tag" style={{ fontSize: 10, padding: "2px 6px", color: "var(--text-muted)", background: "transparent", border: "none" }}>
-                                    +{cand['Skills'].split(/[|,]/).length - 3}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Right Column: Contact Shortcuts & Resume links */}
-                              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                                <div style={{ display: "flex", gap: 4 }}>
-                                  {cand['LinkedIn'] && (
-                                    <a
-                                      href={cand['LinkedIn'].startsWith("http") ? cand['LinkedIn'] : `https://${cand['LinkedIn']}`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="btn btn-secondary btn-sm"
-                                      style={{ padding: 6, borderRadius: "6px" }}
-                                      title="LinkedIn Profile"
-                                    >
-                                      <LinkIcon size={12} />
-                                    </a>
-                                  )}
-                                  <button
-                                    className="btn btn-secondary btn-sm"
-                                    style={{ padding: 6, borderRadius: "6px" }}
-                                    title="Toggle Favorite"
-                                    onClick={() => handleToggleFavorite(cand)}
-                                  >
-                                    <Heart size={12} fill={cand.favorite ? "#E11D48" : "none"} color={cand.favorite ? "#E11D48" : "currentColor"} />
-                                  </button>
-                                </div>
-
-                                {hasResume ? (
-                                  <button
-                                    className="btn btn-primary btn-sm"
-                                    onClick={() => setResumePreviewUrl(cardResumeUrl)}
-                                    style={{ fontSize: 11, padding: "6px 12px", display: "flex", gap: 4, alignItems: "center", borderRadius: "6px", fontWeight: 600 }}
-                                  >
-                                    <FileText size={12} />
-                                    View Resume
-                                  </button>
-                                ) : (
-                                  <span style={{ fontSize: 11, color: "var(--text-muted)", padding: "5px 10px", border: "1px dashed var(--border)", borderRadius: "6px", background: "var(--bg-soft)" }}>
-                                    No Resume
-                                  </span>
-                                )}
-                              </div>
-
-                            </div>
-
-                            {/* Expandable Bottom Panel (Expanded Details) */}
-                            <AnimatePresence>
-                              {isExpanded && (
-                                <motion.div
-                                  initial={{ height: 0, opacity: 0 }}
-                                  animate={{ height: "auto", opacity: 1 }}
-                                  exit={{ height: 0, opacity: 0 }}
-                                  transition={{ duration: 0.28, ease: "easeInOut" }}
-                                  style={{
-                                    borderTop: "1px solid var(--border-soft)",
-                                    background: "var(--bg-soft)",
-                                    overflow: "hidden",
-                                  }}
-                                  onClick={e => e.stopPropagation()}
-                                >
-                                  <div style={{ padding: "20px 24px", display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 24 }}>
-                                    
-                                    {/* Detailed left info */}
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                                      {/* AI Sourced summary */}
-                                      <div style={{ background: "#FFFFFF", padding: 14, borderRadius: "var(--radius-lg)", border: "1px solid var(--border)" }}>
-                                        <p style={{ fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: "#6C5CE7", margin: "0 0 6px" }}>
-                                          Ezra Sourced Summary
-                                        </p>
-                                        <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
-                                          {cand['Candidate Name']} matches at {score}% based on their active experience of {cand.experience || 6} years working with {cand.Skills?.split(/[|,]/).slice(0, 3).join(', ')}. Ezra predicts high technical alignment and smooth system transitions.
-                                        </p>
-                                      </div>
-
-                                      <div>
-                                        <p className="section-title" style={{ margin: "0 0 6px" }}>Full Skills Category</p>
-                                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                          {(cand.Skills || "").split(/[|,]/).map((s, idx) => (
-                                            <span key={idx} className="tag" style={{ fontSize: 11 }}>{s.trim()}</span>
-                                          ))}
-                                        </div>
-                                      </div>
-
-                                      <div>
-                                        <p className="section-title" style={{ margin: "0 0 4px" }}>Profile Summary</p>
-                                        <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
-                                          {cand.summary || "No summary details available on profile."}
-                                        </p>
-                                      </div>
-                                    </div>
-
-                                    {/* Detailed right info */}
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                                      <div>
-                                        <p className="section-title" style={{ margin: "0 0 6px" }}>Recruiter Notes</p>
-                                        <textarea
-                                          rows={3}
-                                          className="input"
-                                          placeholder="Type candidate notes... (auto-saves on focus exit)"
-                                          defaultValue={cand.notes || ""}
-                                          onBlur={(e) => handleNoteSave(cand, e.target.value)}
-                                          style={{ fontSize: 12, resize: "vertical", background: "#FFFFFF" }}
-                                        />
-                                      </div>
-
-                                      <button
-                                        className="btn btn-secondary btn-full btn-sm"
-                                        onClick={() => {
-                                          setEmailDraft({
-                                            to: cand.Email || "",
-                                            subject: `Staffing Opportunity: ${cand.Title || "Role"}`,
-                                            body: `Hello ${cand['Candidate Name']},\n\nWe reviewed your credentials and found them matching our active projects. Please let us know if you are open for a brief introductory discussion.`,
-                                          });
-                                          setIsEmailModalOpen(true);
-                                        }}
-                                      >
-                                        Draft Outreach Email
-                                      </button>
-                                      <button
-                                        className="btn btn-secondary btn-full btn-sm"
-                                        onClick={() => {
-                                          setEditingCandidateForm({
-                                            id: cand.id,
-                                            name: cand['Candidate Name'] || "",
-                                            email: cand.Email || "",
-                                            phone: cand['Contact No'] || "",
-                                            linkedin: cand.LinkedIn || "",
-                                            location: cand['Current Location'] || "",
-                                            visa: cand.VISA || "",
-                                            title: cand.Title || "",
-                                            experience: cand.experience || "",
-                                            skills: cand.Skills || "",
-                                            summary: cand.summary || "",
-                                          });
-                                          setEditingCandidateFile(null);
-                                          setIsEditCandidateOpen(true);
-                                        }}
-                                        style={{ marginTop: 8 }}
-                                      >
-                                        Edit Profile & Resume
-                                      </button>
-                                    </div>
-
                                   </div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
 
-                          </div>
-                        );
-                      })
+                                  {/* Skills Column */}
+                                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", minWidth: 0 }}>
+                                    {(cand['Skills'] || "").split(/[|,]/).slice(0, 3).map((s, idx) => (
+                                      <span key={idx} className="tag" style={{ fontSize: 10, padding: "2px 6px", background: "var(--bg-muted)", border: "1px solid var(--border-soft)", whiteSpace: "nowrap" }}>{s.trim()}</span>
+                                    ))}
+                                    {(cand['Skills'] || "").split(/[|,]/).length > 3 && (
+                                      <span className="tag" style={{ fontSize: 10, padding: "2px 6px", color: "var(--text-muted)", background: "transparent", border: "none" }}>
+                                        +{cand['Skills'].split(/[|,]/).length - 3}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Right Column: Contact Shortcuts & Resume links */}
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                                    <div style={{ display: "flex", gap: 4 }}>
+                                      {cand['LinkedIn'] && (
+                                        <a
+                                          href={cand['LinkedIn'].startsWith("http") ? cand['LinkedIn'] : `https://${cand['LinkedIn']}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="btn btn-secondary btn-sm"
+                                          style={{ padding: 6, borderRadius: "6px" }}
+                                          title="LinkedIn Profile"
+                                        >
+                                          <LinkIcon size={12} />
+                                        </a>
+                                      )}
+                                      <button
+                                        className="btn btn-secondary btn-sm"
+                                        style={{ padding: 6, borderRadius: "6px" }}
+                                        title="Toggle Favorite"
+                                        onClick={() => handleToggleFavorite(cand)}
+                                      >
+                                        <Heart size={12} fill={cand.favorite ? "#E11D48" : "none"} color={cand.favorite ? "#E11D48" : "currentColor"} />
+                                      </button>
+                                    </div>
+
+                                    {hasResume ? (
+                                      <button
+                                        className="btn btn-primary btn-sm"
+                                        onClick={() => setResumePreviewUrl(cardResumeUrl)}
+                                        style={{ fontSize: 11, padding: "6px 12px", display: "flex", gap: 4, alignItems: "center", borderRadius: "6px", fontWeight: 600 }}
+                                      >
+                                        <FileText size={12} />
+                                        View Resume
+                                      </button>
+                                    ) : (
+                                      <span style={{ fontSize: 11, color: "var(--text-muted)", padding: "5px 10px", border: "1px dashed var(--border)", borderRadius: "6px", background: "var(--bg-soft)" }}>
+                                        No Resume
+                                      </span>
+                                    )}
+                                  </div>
+
+                                </div>
+
+                                {/* Expandable Bottom Panel (Expanded Details) */}
+                                <AnimatePresence>
+                                  {isExpanded && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: "auto", opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.28, ease: "easeInOut" }}
+                                      style={{
+                                        borderTop: "1px solid var(--border-soft)",
+                                        background: "var(--bg-soft)",
+                                        overflow: "hidden",
+                                      }}
+                                      onClick={e => e.stopPropagation()}
+                                    >
+                                      <div style={{ padding: "20px 24px", display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 24 }}>
+                                        
+                                        {/* Detailed left info */}
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                                          {/* AI Sourced summary */}
+                                          <div style={{ background: "#FFFFFF", padding: 14, borderRadius: "var(--radius-lg)", border: "1px solid var(--border)" }}>
+                                            <p style={{ fontSize: 11, textTransform: "uppercase", fontWeight: 700, color: "#6C5CE7", margin: "0 0 6px" }}>
+                                              Ezra Sourced Summary
+                                            </p>
+                                            <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
+                                              {cand['Candidate Name']} matches at {score}% based on their active experience of {cand.experience || 6} years working with {cand.Skills?.split(/[|,]/).slice(0, 3).join(', ')}. Ezra predicts high technical alignment and smooth system transitions.
+                                            </p>
+                                          </div>
+
+                                          <div>
+                                            <p className="section-title" style={{ margin: "0 0 6px" }}>Full Skills Category</p>
+                                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                              {(cand.Skills || "").split(/[|,]/).map((s, idx) => (
+                                                <span key={idx} className="tag" style={{ fontSize: 11 }}>{s.trim()}</span>
+                                              ))}
+                                            </div>
+                                          </div>
+
+                                          <div>
+                                            <p className="section-title" style={{ margin: "0 0 4px" }}>Profile Summary</p>
+                                            <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
+                                              {cand.summary || "No summary details available on profile."}
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        {/* Detailed right info */}
+                                        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                                          <div>
+                                            <p className="section-title" style={{ margin: "0 0 6px" }}>Recruiter Notes</p>
+                                            <textarea
+                                              rows={3}
+                                              className="input"
+                                              placeholder="Type candidate notes... (auto-saves on focus exit)"
+                                              defaultValue={cand.notes || ""}
+                                              onBlur={(e) => handleNoteSave(cand, e.target.value)}
+                                              style={{ fontSize: 12, resize: "vertical", background: "#FFFFFF" }}
+                                            />
+                                          </div>
+
+                                          <button
+                                            className="btn btn-secondary btn-full btn-sm"
+                                            onClick={() => {
+                                              setEmailDraft({
+                                                to: cand.Email || "",
+                                                subject: `Staffing Opportunity: ${cand.Title || "Role"}`,
+                                                body: `Hello ${cand['Candidate Name']},\n\nWe reviewed your credentials and found them matching our active projects. Please let us know if you are open for a brief introductory discussion.`,
+                                              });
+                                              setIsEmailModalOpen(true);
+                                            }}
+                                          >
+                                            Draft Outreach Email
+                                          </button>
+                                          <button
+                                            className="btn btn-secondary btn-full btn-sm"
+                                            onClick={() => {
+                                              setEditingCandidateForm({
+                                                id: cand.id,
+                                                name: cand['Candidate Name'] || "",
+                                                email: cand.Email || "",
+                                                phone: cand['Contact No'] || "",
+                                                linkedin: cand.LinkedIn || "",
+                                                location: cand['Current Location'] || "",
+                                                visa: cand.VISA || "",
+                                                title: cand.Title || "",
+                                                experience: cand.experience || "",
+                                                skills: cand.Skills || "",
+                                                summary: cand.summary || "",
+                                              });
+                                              setEditingCandidateFile(null);
+                                              setIsEditCandidateOpen(true);
+                                            }}
+                                            style={{ marginTop: 8 }}
+                                          >
+                                            Edit Profile & Resume
+                                          </button>
+                                        </div>
+
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
