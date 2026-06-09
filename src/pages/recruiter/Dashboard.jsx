@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Brain,
@@ -133,13 +133,15 @@ function getEmbeddableResumeUrl(url) {
    ════════════════════════════════════════════════════════ */
 export default function RecruiterDashboard({ activeTab }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlQuery = searchParams.get('q') || '';
 
   // Unified Database State
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Search & Filter state
-  const [searchVal, setSearchVal] = useState("");
+  const [searchVal, setSearchVal] = useState(urlQuery);
   const [activeFilters, setActiveFilters] = useState({
     visa: "All",
     location: "",
@@ -150,6 +152,16 @@ export default function RecruiterDashboard({ activeTab }) {
     hasResume: false,
     favoritesOnly: false,
   });
+
+  // Sync search input with URL search parameters changes (e.g. search from Topbar)
+  useEffect(() => {
+    setSearchVal(urlQuery);
+  }, [urlQuery]);
+
+  const handleSearchChange = (value) => {
+    setSearchVal(value);
+    setSearchParams(value ? { q: value } : {});
+  };
 
   const [sortOrder, setSortOrder] = useState("newest");
   const [skillInput, setSkillInput] = useState("");
@@ -663,7 +675,7 @@ export default function RecruiterDashboard({ activeTab }) {
                         type="text"
                         placeholder="Search resumes... e.g. Snowflake AND Python"
                         value={searchVal}
-                        onChange={(e) => setSearchVal(e.target.value)}
+                        onChange={(e) => handleSearchChange(e.target.value)}
                       />
                     </div>
 
