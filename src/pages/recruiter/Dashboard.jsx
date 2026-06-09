@@ -39,6 +39,7 @@ import {
   File,
   User,
   Share2,
+  Loader2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
