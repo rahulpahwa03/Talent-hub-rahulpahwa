@@ -1028,148 +1028,108 @@ export default function RecruiterDashboard({ activeTab }) {
                             }}
                             onClick={() => setExpandedCandidateId(isExpanded ? null : cand.id)}
                           >
-                            {/* Top Collapsed Row (Long in width, decent height showing all details beautifully) */}
+                            {/* Top Collapsed Row (CSS Grid to prevent overlapping and layout wrapping) */}
                             <div style={{ 
-                              display: "flex", 
+                              display: "grid", 
+                              gridTemplateColumns: "280px 180px 1fr 180px", 
                               alignItems: "center", 
-                              justifyContent: "space-between", 
-                              padding: "20px 24px", 
-                              flexWrap: "wrap", 
-                              gap: 20,
-                              minHeight: 105,
+                              padding: "16px 24px", 
+                              gap: 16,
+                              minHeight: 88,
                             }}>
                               
-                              {/* Left Column: Avatar + Name + Title + Email/Phone Quick Copy */}
-                              <div style={{ display: "flex", gap: 16, alignItems: "center", flex: "1.5", minWidth: 290 }}>
+                              {/* Left Column: Avatar + Name + Title + Email Quick Copy */}
+                              <div style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
                                 <div
                                   className="avatar avatar-md"
                                   style={{
                                     background: colorInfo.bg,
                                     color: colorInfo.text,
                                     border: `1px solid ${colorInfo.border}`,
-                                    width: 48, height: 48, fontSize: 15,
+                                    width: 42, height: 42, fontSize: 14,
                                     fontWeight: 700,
-                                    borderRadius: "12px",
+                                    borderRadius: "10px",
                                     flexShrink: 0,
                                   }}
                                 >
                                   {cand['Candidate Name'] ? cand['Candidate Name'].split(' ').slice(0, 2).map(n => n[0]).join('') : "?"}
                                 </div>
-                                <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-                                  <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                                <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                                  <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                     {cand['Candidate Name']}
                                   </h4>
-                                  <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0, fontWeight: 500 }}>
+                                  <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                     {cand['Title'] || "Technical Consultant"}
                                   </p>
-                                  {/* Quick Contact & Email Copy Actions */}
-                                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 2 }} onClick={e => e.stopPropagation()}>
-                                    {cand['Email'] && (
+                                  {cand['Email'] && (
+                                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} onClick={e => e.stopPropagation()}>
                                       <span 
                                         onClick={() => {
                                           navigator.clipboard.writeText(cand['Email']);
                                           toast.success("Email copied");
                                         }}
-                                        style={{ 
-                                          fontSize: 11.5, 
-                                          color: "var(--text-muted)", 
-                                          cursor: "pointer", 
-                                          display: "inline-flex", 
-                                          alignItems: "center", 
-                                          gap: 4,
-                                          background: "var(--bg-soft)",
-                                          padding: "2px 8px",
-                                          borderRadius: "4px",
-                                          border: "1px solid var(--border-soft)",
-                                          transition: "all 0.15s",
-                                        }}
+                                        style={{ cursor: "pointer", textDecoration: "underline" }}
                                         title="Click to copy email"
-                                        onMouseEnter={e => e.currentTarget.style.color = "var(--primary)"}
-                                        onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
                                       >
-                                        <Mail size={11} />
                                         {cand['Email']}
                                       </span>
-                                    )}
-                                    {cand['Contact No'] && (
-                                      <span 
-                                        onClick={() => {
-                                          navigator.clipboard.writeText(cand['Contact No']);
-                                          toast.success("Phone copied");
-                                        }}
-                                        style={{ 
-                                          fontSize: 11.5, 
-                                          color: "var(--text-muted)", 
-                                          cursor: "pointer", 
-                                          display: "inline-flex", 
-                                          alignItems: "center", 
-                                          gap: 4,
-                                          background: "var(--bg-soft)",
-                                          padding: "2px 8px",
-                                          borderRadius: "4px",
-                                          border: "1px solid var(--border-soft)",
-                                          transition: "all 0.15s",
-                                        }}
-                                        title="Click to copy phone"
-                                        onMouseEnter={e => e.currentTarget.style.color = "var(--primary)"}
-                                        onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
-                                      >
-                                        <Phone size={11} />
-                                        {cand['Contact No']}
-                                      </span>
-                                    )}
-                                  </div>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 
                               {/* Middle Column: AI Match, Salary and Visa Status */}
-                              <div style={{ display: "flex", gap: 8, flex: "1", flexWrap: "wrap", alignItems: "center", minWidth: 220 }}>
-                                {cand['VISA'] && <span className="badge badge-blue" style={{ fontSize: 11, padding: "4px 8px" }}>{cand['VISA']}</span>}
-                                {cand.experience && <span className="badge badge-gray" style={{ fontSize: 11, padding: "4px 8px" }}>{cand.experience} yrs exp</span>}
-                                <span className="badge badge-amber" style={{ display: "flex", gap: 4, alignItems: "center", fontSize: 11, padding: "4px 8px" }}>
-                                  <DollarSign size={11} />
-                                  {rate}
-                                </span>
-                                <span className="badge badge-green" style={{ display: "flex", gap: 4, alignItems: "center", fontWeight: 700, fontSize: 11, padding: "4px 8px" }}>
-                                  <Zap size={11} />
-                                  {score}% AI Match
-                                </span>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                                  {cand['VISA'] && <span className="badge badge-blue" style={{ fontSize: 9.5, padding: "2px 6px" }}>{cand['VISA']}</span>}
+                                  {cand.experience && <span className="badge badge-gray" style={{ fontSize: 9.5, padding: "2px 6px" }}>{cand.experience} yrs</span>}
+                                </div>
+                                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                                  <span className="badge badge-amber" style={{ display: "flex", gap: 2, alignItems: "center", fontSize: 9.5, padding: "2px 6px" }}>
+                                    <DollarSign size={9} />
+                                    {rate.split(' / ')[0]}
+                                  </span>
+                                  <span className="badge badge-green" style={{ display: "flex", gap: 2, alignItems: "center", fontWeight: 700, fontSize: 9.5, padding: "2px 6px" }}>
+                                    <Zap size={9} />
+                                    {score}% Match
+                                  </span>
+                                </div>
                               </div>
 
                               {/* Skills Column */}
-                              <div style={{ display: "flex", gap: 5, flex: "1.3", flexWrap: "wrap", minWidth: 220 }}>
-                                {(cand['Skills'] || "").split(/[|,]/).slice(0, 4).map((s, idx) => (
-                                  <span key={idx} className="tag" style={{ fontSize: 10.5, padding: "2px 8px", background: "var(--bg-muted)", border: "1px solid var(--border-soft)" }}>{s.trim()}</span>
+                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", minWidth: 0 }}>
+                                {(cand['Skills'] || "").split(/[|,]/).slice(0, 3).map((s, idx) => (
+                                  <span key={idx} className="tag" style={{ fontSize: 10, padding: "2px 6px", background: "var(--bg-muted)", border: "1px solid var(--border-soft)", whiteSpace: "nowrap" }}>{s.trim()}</span>
                                 ))}
-                                {(cand['Skills'] || "").split(/[|,]/).length > 4 && (
-                                  <span className="tag" style={{ fontSize: 10.5, padding: "2px 8px", color: "var(--text-muted)", background: "transparent", border: "none" }}>
-                                    +{cand['Skills'].split(/[|,]/).length - 4} more
+                                {(cand['Skills'] || "").split(/[|,]/).length > 3 && (
+                                  <span className="tag" style={{ fontSize: 10, padding: "2px 6px", color: "var(--text-muted)", background: "transparent", border: "none" }}>
+                                    +{cand['Skills'].split(/[|,]/).length - 3}
                                   </span>
                                 )}
                               </div>
 
                               {/* Right Column: Contact Shortcuts & Resume links */}
-                              <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                                <div style={{ display: "flex", gap: 6 }}>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                                <div style={{ display: "flex", gap: 4 }}>
                                   {cand['LinkedIn'] && (
                                     <a
                                       href={cand['LinkedIn'].startsWith("http") ? cand['LinkedIn'] : `https://${cand['LinkedIn']}`}
                                       target="_blank"
                                       rel="noreferrer"
                                       className="btn btn-secondary btn-sm"
-                                      style={{ padding: 8, borderRadius: "6px" }}
+                                      style={{ padding: 6, borderRadius: "6px" }}
                                       title="LinkedIn Profile"
                                     >
-                                      <LinkIcon size={13} />
+                                      <LinkIcon size={12} />
                                     </a>
                                   )}
                                   <button
                                     className="btn btn-secondary btn-sm"
-                                    style={{ padding: 8, borderRadius: "6px" }}
+                                    style={{ padding: 6, borderRadius: "6px" }}
                                     title="Toggle Favorite"
                                     onClick={() => handleToggleFavorite(cand)}
                                   >
-                                    <Heart size={13} fill={cand.favorite ? "#E11D48" : "none"} color={cand.favorite ? "#E11D48" : "currentColor"} />
+                                    <Heart size={12} fill={cand.favorite ? "#E11D48" : "none"} color={cand.favorite ? "#E11D48" : "currentColor"} />
                                   </button>
                                 </div>
 
@@ -1177,13 +1137,13 @@ export default function RecruiterDashboard({ activeTab }) {
                                   <button
                                     className="btn btn-primary btn-sm"
                                     onClick={() => setResumePreviewUrl(cardResumeUrl)}
-                                    style={{ fontSize: 12, padding: "7px 14px", display: "flex", gap: 6, alignItems: "center", borderRadius: "8px", fontWeight: 600 }}
+                                    style={{ fontSize: 11, padding: "6px 12px", display: "flex", gap: 4, alignItems: "center", borderRadius: "6px", fontWeight: 600 }}
                                   >
-                                    <FileText size={13} />
+                                    <FileText size={12} />
                                     View Resume
                                   </button>
                                 ) : (
-                                  <span style={{ fontSize: 11.5, color: "var(--text-muted)", padding: "6px 12px", border: "1px dashed var(--border)", borderRadius: "8px", background: "var(--bg-soft)" }}>
+                                  <span style={{ fontSize: 11, color: "var(--text-muted)", padding: "5px 10px", border: "1px dashed var(--border)", borderRadius: "6px", background: "var(--bg-soft)" }}>
                                     No Resume
                                   </span>
                                 )}
