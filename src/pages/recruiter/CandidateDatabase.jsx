@@ -1857,9 +1857,9 @@ function CandidatesPanel({
   phoneFilter, setPhoneFilter,
   onScrape,
   onUploadResume: handleUploadResume,
-  onUpdateCandidate
+  onUpdateCandidate,
+  loading = false
 }) {
-  const [loading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
 
   // Pagination state
@@ -2101,6 +2101,7 @@ export default function CandidateDatabase() {
   }, []);
 
   const [candidatesList, setCandidatesList] = useState(CANDIDATES);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
 
   const handleUploadResume = async (candidate, file) => {
     if (!file) return;
@@ -2452,18 +2453,70 @@ export default function CandidateDatabase() {
       console.warn('Supabase is not configured. Falling back to static mock data.');
       return;
     }
+    setLoadingCandidates(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('candidates')
         .select('*')
         .order('created_at', { ascending: false });
+
+      // Apply server-side filters if we have filters set
+      if (search.trim()) {
+        const term = `%${search.trim()}%`;
+        query = query.or(`"Candidate Name".ilike.${term},Title.ilike.${term},"Current Location".ilike.${term},Skills.ilike.${term}`);
+      }
+      if (statusFilter !== 'All') {
+        query = query.eq('status', statusFilter);
+      }
+      if (visaFilter !== 'All') {
+        query = query.eq('VISA', visaFilter);
+      }
+      if (workPref !== 'All') {
+        query = query.eq('work_pref', workPref);
+      }
+      if (expFilter > 0) {
+        query = query.gte('experience', expFilter);
+      }
+      if (resumeFilter !== 'All') {
+        if (resumeFilter === 'With') {
+          query = query.not('resume_url', 'is', null).neq('resume_url', '');
+        } else {
+          query = query.or('resume_url.is.null,resume_url.eq.');
+        }
+      }
+      if (linkedinFilter !== 'All') {
+        if (linkedinFilter === 'With') {
+          query = query.not('LinkedIn', 'is', null).neq('LinkedIn', '');
+        } else {
+          query = query.or('LinkedIn.is.null,LinkedIn.eq.');
+        }
+      }
+      if (emailFilter !== 'All') {
+        if (emailFilter === 'With') {
+          query = query.not('Email', 'is', null).neq('Email', '');
+        } else {
+          query = query.or('Email.is.null,Email.eq.');
+        }
+      }
+      if (phoneFilter !== 'All') {
+        if (phoneFilter === 'With') {
+          query = query.not('Contact No', 'is', null).neq('Contact No', '');
+        } else {
+          query = query.or('Contact No.is.null,Contact No.eq.');
+        }
+      }
+
+      // Limit response to 1000 matching candidates (Supabase cap)
+      query = query.limit(1000);
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('Error fetching candidates from Supabase:', error);
         return;
       }
 
-      if (data && data.length > 0) {
+      if (data) {
         const mapped = data.map((c, index) => {
           const skillsArray = c["Skills"]
             ? c["Skills"].split(/[|,]/).map(s => s.trim()).filter(Boolean)
@@ -2497,13 +2550,18 @@ export default function CandidateDatabase() {
       }
     } catch (err) {
       console.error('Unexpected error loading candidates:', err);
+    } finally {
+      setLoadingCandidates(false);
     }
   };
 
-  // Fetch actual database candidates on mount
+  // Fetch actual database candidates whenever search or filters change (debounced)
   useEffect(() => {
-    loadCandidates();
-  }, []);
+    const timer = setTimeout(() => {
+      loadCandidates();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [search, statusFilter, visaFilter, workPref, expFilter, resumeFilter, linkedinFilter, emailFilter, phoneFilter]);
 
   // Inject styles once
   useEffect(() => {
@@ -2595,6 +2653,7 @@ export default function CandidateDatabase() {
             onScrape={triggerLinkedInCrawl}
             onUploadResume={handleUploadResume}
             onUpdateCandidate={handleUpdateCandidateFields}
+            loading={loadingCandidates}
           />
         ) : (
           <DetailPage
