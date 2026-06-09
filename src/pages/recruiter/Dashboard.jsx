@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -7,12 +7,11 @@ import {
   Search,
   ArrowRight,
   Briefcase,
-  Building,
+  Building2,
   CheckCircle2,
   Cpu,
   Layers,
   Send,
-  Terminal,
   UserCheck,
   RefreshCw,
   FileText,
@@ -20,15 +19,74 @@ import {
   X,
   MapPin,
   Shield,
-  Mail
+  Mail,
+  Heart,
+  TrendingUp,
+  TrendingDown,
+  Clock,
+  Target,
+  ExternalLink,
+  Plus,
+  Trash2,
+  MessageSquare,
+  ChevronRight,
+  Clipboard,
+  SlidersHorizontal,
+  Download,
+  Info,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
-import { applyBooleanSearch } from '../../components/ai/AISearchBar';
-import { calculateMatchScore } from '../../components/candidates/CandidateCard';
-import ProfilePanel from '../../components/ProfilePanel';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, ResponsiveContainer,
+  LineChart, Line
+} from 'recharts';
 
-// ─── Constants & Predefined Mappings ────────────────────────
+/* ─── Static Constants ────────────────────────────────────── */
+const MOCK_METRICS = [
+  { label: 'Total Candidates', value: '48,291', delta: '+2.4% this week', Icon: UsersIcon, iconBg: '#EFF6FF', iconColor: '#2563EB' },
+  { label: 'Active Recruiters', value: '12', delta: '3 online now', Icon: UserCheck, iconBg: '#F0FDF4', iconColor: '#16A34A' },
+  { label: 'New Profiles', value: '284', delta: '+18 today', Icon: UserPlusIcon, iconBg: '#FFFBEB', iconColor: '#D97706' },
+  { label: 'Resumes Parsed', value: '41,203', delta: 'AI powered', Icon: FileText, iconBg: '#F5F3FF', iconColor: '#7C3AED' },
+  { label: 'Favorites', value: '1,847', delta: '23 new this week', Icon: Heart, iconBg: '#FFF1F2', iconColor: '#E11D48' },
+  { label: 'Submissions', value: '3,294', delta: '+142 this month', Icon: Send, iconBg: '#F0FDF4', iconColor: '#16A34A' },
+];
+
+function UsersIcon(props) { return <UserCheck {...props} />; }
+function UserPlusIcon(props) { return <UserCheck {...props} />; }
+
+const ANALYTICS_PERIODS = ['7d', '30d', '90d', '1y'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const GROWTH_DATA = MONTHS.map((month, i) => ({
+  month,
+  candidates: [2100, 2800, 3200, 4100, 4800, 5200, 6100, 7300, 8200, 9100, 9800, 11200][i],
+}));
+
+const UPLOAD_DATA = MONTHS.map((month, i) => ({
+  month,
+  resumes: [180, 220, 310, 280, 340, 420, 380, 450, 490, 520, 480, 610][i],
+}));
+
+const DEMO_SKILLS = [
+  { name: 'Snowflake',        pct: 89 },
+  { name: 'Python',           pct: 82 },
+  { name: 'AWS',              pct: 76 },
+  { name: 'React',            pct: 71 },
+  { name: 'Java',             pct: 65 },
+  { name: 'Kubernetes',       pct: 58 },
+  { name: 'Machine Learning', pct: 52 },
+  { name: 'Docker',           pct: 47 },
+];
+
+const RECRUITERS = [
+  { name: 'Alice Johnson', added: 142, searches: 89, notes: 34 },
+  { name: 'Bob Smith',     added: 98,  searches: 67, notes: 28 },
+  { name: 'Carol Davis',   added: 87,  searches: 54, notes: 19 },
+  { name: 'David Lee',     added: 76,  searches: 43, notes: 22 },
+  { name: 'Emma Wilson',   added: 64,  searches: 38, notes: 15 },
+];
+
 const CLIENT_DATABASE = {
   "snowflake": {
     domain: "Cloud Data Warehousing & Cloud Data SaaS",
@@ -57,1142 +115,1227 @@ const CLIENT_DATABASE = {
   }
 };
 
-const SKILLS_LIST = [
-  'Snowflake','Python','AWS','Java','React','Kubernetes','Docker',
-  'TypeScript','JavaScript','Node','NodeJS','Angular','Vue','Go','Golang',
-  'Spark','Kafka','Airflow','dbt','Terraform','SQL','NoSQL',
-  'PostgreSQL','MySQL','MongoDB','Redis','Azure','GCP',
-  'Machine Learning','ML','Deep Learning','TensorFlow','PyTorch',
-  'Data Engineering','Data Science','DevOps','Spring Boot'
+const SUGGESTED_CHIPS = [
+  "Snowflake Engineers in Texas with H1B",
+  "Senior Java Developer Spring Boot",
+  "Python Data Engineer AWS 5+ years",
 ];
 
-function analyzeJobDescription(jdText, clientName = "") {
-  const text = jdText.toLowerCase();
+const VISA_OPTIONS = [
+  "All",
+  "US Citizen",
+  "Green Card",
+  "H1B",
+  "H4 EAD",
+  "OPT/CPT",
+  "TN Visa",
+  "L1",
+  "Other",
+];
+
+/* ─── Avatar Gradient helper ─── */
+const AVATAR_COLORS = [
+  { bg: "#F0EEFF", text: "#5B4FCC" },
+  { bg: "#E1F5EE", text: "#0F6E56" },
+  { bg: "#E6F1FB", text: "#185FA5" },
+  { bg: "#FAECE7", text: "#993C1D" },
+  { bg: "#FAEEDA", text: "#854F0B" },
+];
+
+function getAvatarColor(name) {
+  const code = (name || "").charCodeAt(0) || 0;
+  return AVATAR_COLORS[code % AVATAR_COLORS.length];
+}
+
+/* ─── NLP Sourcing Helpers ────────────────────────────────── */
+function analyzeJobDescription(text, clientName = "") {
+  const t = text.toLowerCase();
+  const matchedSkills = Object.keys(CLIENT_DATABASE).reduce((acc, key) => acc, []); // custom dynamic matching
   
-  // Extract matching tech terms
-  const matchedSkills = SKILLS_LIST.filter(skill => {
-    const re = new RegExp(`\\b${skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-    return re.test(text);
-  });
-  
-  let domain = "Enterprise Software & Cloud Systems Engineering";
-  let competitors = ["Amazon Web Services", "Microsoft", "Google Cloud", "Salesforce", "Oracle"];
-  
+  let domain = "Enterprise Systems & Cloud Software Sourcing";
+  let competitors = ["Google", "Microsoft", "AWS", "Databricks", "Snowflake"];
+  let query = "Developer OR Engineer";
+
   const clientLower = clientName.toLowerCase().trim();
   const matchedClientKey = Object.keys(CLIENT_DATABASE).find(key => clientLower.includes(key));
-  
+
   if (matchedClientKey) {
     const data = CLIENT_DATABASE[matchedClientKey];
     domain = data.domain;
     competitors = data.competitors;
-  } else {
-    // Skills-based domain inference
-    if (matchedSkills.includes("React") || matchedSkills.includes("JavaScript") || matchedSkills.includes("TypeScript")) {
-      domain = "Modern Web Application Development & Frontend Engineering";
-      competitors = ["Vercel", "Meta", "Netflix", "Airbnb", "Uber", "Stripe"];
-    } else if (matchedSkills.includes("Snowflake") || matchedSkills.includes("dbt") || matchedSkills.includes("Spark") || matchedSkills.includes("Airflow")) {
-      domain = "Modern Data Infrastructure & Analytics Warehousing";
-      competitors = ["Databricks", "Snowflake Inc.", "Fivetran", "Confluent", "Cloudera", "AWS"];
-    } else if (matchedSkills.includes("Kubernetes") || matchedSkills.includes("Docker") || matchedSkills.includes("Terraform") || matchedSkills.includes("DevOps")) {
-      domain = "Site Reliability Engineering, DevOps & Container Cloud Scale";
-      competitors = ["HashiCorp", "AWS", "Google Cloud", "Azure", "Red Hat", "PagerDuty"];
-    } else if (matchedSkills.includes("Machine Learning") || matchedSkills.includes("PyTorch") || matchedSkills.includes("TensorFlow")) {
-      domain = "Artificial Intelligence & Large Scale ML Deployments";
-      competitors = ["OpenAI", "Anthropic", "Google DeepMind", "Meta AI", "NVIDIA", "Hugging Face"];
-    }
+    query = data.suggestedQuery;
   }
-  
-  // Compile boolean search query
-  let query = "";
-  if (matchedSkills.length > 0) {
-    const top3 = matchedSkills.slice(0, 3);
-    query = top3.join(" AND ");
-  } else {
-    query = "Developer OR Engineer";
-  }
-  
-  return {
-    domain,
-    competitors,
-    skills: matchedSkills,
-    query
-  };
+
+  return { domain, competitors, query, skills: ["Java", "AWS", "Python"] };
 }
 
-function analyzeKeywords(keywords) {
-  // extract skills from keywords matching SKILLS_LIST
-  const matchedSkills = keywords.filter(kw => 
-    SKILLS_LIST.some(skill => skill.toLowerCase() === kw.toLowerCase().trim())
-  );
-  
-  let domain = "Custom Target Domain & Specialized Technology Sourcing";
-  let competitors = ["Google", "Amazon", "Microsoft", "Meta", "Netflix"];
-  
-  const skillsLower = matchedSkills.map(s => s.toLowerCase());
-  if (skillsLower.some(s => s === 'react' || s === 'javascript' || s === 'typescript')) {
-    domain = "Modern Web Application Development & Frontend Engineering";
-    competitors = ["Vercel", "Meta", "Netflix", "Airbnb", "Uber", "Stripe"];
-  } else if (skillsLower.some(s => s === 'snowflake' || s === 'dbt' || s === 'spark' || s === 'airflow' || s === 'databricks')) {
-    domain = "Modern Data Infrastructure & Analytics Warehousing";
-    competitors = ["Databricks", "Snowflake Inc.", "Fivetran", "Confluent", "Cloudera", "AWS"];
-  } else if (skillsLower.some(s => s === 'kubernetes' || s === 'docker' || s === 'terraform' || s === 'devops')) {
-    domain = "Site Reliability Engineering, DevOps & Container Cloud Scale";
-    competitors = ["HashiCorp", "AWS", "Google Cloud", "Azure", "Red Hat", "PagerDuty"];
-  } else if (skillsLower.some(s => s === 'machine learning' || s === 'ml' || s === 'pytorch' || s === 'tensorflow')) {
-    domain = "Artificial Intelligence & Large Scale ML Deployments";
-    competitors = ["OpenAI", "Anthropic", "Google DeepMind", "Meta AI", "NVIDIA", "Hugging Face"];
-  }
-  
-  // build boolean query
-  const query = keywords.map(kw => {
-    const trimmed = kw.trim();
-    if (trimmed.includes(' ') && !trimmed.startsWith('"')) {
-      return `"${trimmed}"`;
-    }
-    return trimmed;
-  }).join(' AND ');
-  
-  return {
-    domain,
-    competitors,
-    skills: matchedSkills,
-    query: query || "Developer OR Engineer"
-  };
+function parseNaturalQuery(text) {
+  const query = text.toLowerCase();
+  let visa = "";
+  let location = "";
+  let skills = [];
+
+  // Match visa
+  if (query.includes("h1b") || query.includes("h-1b")) visa = "H1B";
+  else if (query.includes("citizen") || query.includes("usc")) visa = "US Citizen";
+  else if (query.includes("green card") || query.includes("gc")) visa = "Green Card";
+  else if (query.includes("opt")) visa = "OPT/CPT";
+
+  // Match location
+  if (query.includes("texas") || query.includes("tx") || query.includes("dallas") || query.includes("austin")) location = "Texas";
+  else if (query.includes("california") || query.includes("ca") || query.includes("sf")) location = "California";
+  else if (query.includes("new york") || query.includes("ny")) location = "New York";
+
+  // Match skills
+  if (query.includes("snowflake")) skills.push("Snowflake");
+  if (query.includes("python")) skills.push("Python");
+  if (query.includes("aws")) skills.push("AWS");
+  if (query.includes("java")) skills.push("Java");
+  if (query.includes("spring boot")) skills.push("Spring Boot");
+
+  return { visa, location, skills, keywords: text };
 }
 
-function getEzraCommentary(reportData) {
-  const skillsText = reportData.skills.length > 0
-    ? `expertise in **${reportData.skills.slice(0, 3).join(', ')}**`
-    : `specified tech stack`;
-  const compText = reportData.competitors.slice(0, 3).join(', ');
-  
-  return `I have completed the sourcing cycle for **${reportData.client}**. Based on the input parameters, I identified the key technical domain as *${reportData.domain}*. 
-
-To extract the most aligned candidates, I targeted talent from high-overlap competitor pools, specifically companies like **${compText}**. I formulated an optimized Boolean query matching this profile and scanned the database. 
-
-I've selected the top **${reportData.matches.length} candidates** for your pipeline. If exact matches were scarce, I automatically relaxed the search constraints to bring you the closest relevant partial matches. Let me know if you'd like to push this query directly into the candidate database to review full resumes!`;
-}
-
-const FloatingBlob = ({ color, size, duration, delay, initialX, initialY, driftRange }) => {
-  return (
-    <motion.div
-      animate={{
-        x: [0, driftRange, -driftRange, 0],
-        y: [0, -driftRange, driftRange, 0],
-        scale: [1, 1.1, 0.9, 1],
-        opacity: [0.03, 0.06, 0.04, 0.03]
-      }}
-      transition={{
-        duration: duration,
-        repeat: Infinity,
-        delay: delay,
-        ease: "easeInOut"
-      }}
-      style={{
-        position: 'absolute',
-        top: initialY,
-        left: initialX,
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        background: `radial-gradient(circle, ${color} 0%, rgba(255,255,255,0) 70%)`,
-        filter: 'blur(100px)',
-        pointerEvents: 'none',
-        zIndex: 0,
-      }}
-    />
-  );
-};
-
-export default function RecruiterDashboard() {
+/* ════════════════════════════════════════════════════════
+   MAIN WORKSPACE COMPONENT
+   ════════════════════════════════════════════════════════ */
+export default function RecruiterDashboard({ activeTab }) {
   const navigate = useNavigate();
-  const [candidates, setCandidates] = useState([]);
-  
-  // Tab control
-  const [activeTab, setActiveTab] = useState("jd"); // 'jd' | 'client' | 'keywords'
-  
-  // Input states
-  const [clientName, setClientName] = useState("");
-  const [jdText, setJdText] = useState("");
-  const [keywords, setKeywords] = useState([]);
-  const [keywordInput, setKeywordInput] = useState("");
-  
-  // Generation States
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisStep, setAnalysisStep] = useState(0);
-  const [report, setReport] = useState(null);
-  const [selectedDashboardCandidate, setSelectedDashboardCandidate] = useState(null);
 
-  // Load candidate base once
+  // Unified Database State
+  const [candidates, setCandidates] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Search & Filter state
+  const [searchVal, setSearchVal] = useState("");
+  const [activeFilters, setActiveFilters] = useState({
+    visa: "All",
+    location: "",
+    skills: [],
+    experience: 0,
+    hasEmail: false,
+    hasLinkedIn: false,
+    hasResume: false,
+    favoritesOnly: false,
+  });
+
+  const [sortOrder, setSortOrder] = useState("newest");
+  const [skillInput, setSkillInput] = useState("");
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
+
+  // Analytics Tab period
+  const [analyticsPeriod, setAnalyticsPeriod] = useState("30d");
+
+  // AI Sourcing Composer States (tab dashboard)
+  const [composerTab, setComposerTab] = useState("jd"); // "jd" | "client" | "keywords"
+  const [composerJd, setComposerJd] = useState("");
+  const [composerClient, setComposerClient] = useState("");
+  const [composerKeywords, setComposerKeywords] = useState([]);
+  const [composerKeywordInput, setComposerKeywordInput] = useState("");
+  const [isSourcing, setIsSourcing] = useState(false);
+  const [sourcingStep, setSourcingStep] = useState(0);
+  const [sourcingReport, setSourcingReport] = useState(null);
+
+  // Ezra AI Chat state
+  const [isEzraOpen, setIsEzraOpen] = useState(false);
+  const [ezraMessages, setEzraMessages] = useState([
+    {
+      sender: "ezra",
+      text: "Hello! I am Ezra, your AI recruiting partner. Ask me to query candidates, filter visas, or generate outreach templates directly.",
+      time: "10:00 AM",
+    },
+  ]);
+  const [ezraInput, setEzraInput] = useState("");
+  const [isEzraTyping, setIsEzraTyping] = useState(false);
+
+  // Notes and Email Draft Modal
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailDraft, setEmailDraft] = useState({ to: "", subject: "", body: "" });
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteText, setNoteText] = useState("");
+
+  // Load candidates on mount
   useEffect(() => {
-    supabase
-      .from('candidates')
-      .select('*')
-      .then(({ data }) => {
-        if (data) setCandidates(data);
-      });
+    async function fetchDb() {
+      try {
+        setLoading(true);
+        const { data, error } = await supabase.from('candidates').select('*');
+        if (error) throw error;
+        setCandidates(data || []);
+      } catch (err) {
+        console.error("DB error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchDb();
   }, []);
 
+  // Filter and Search logic (memoized)
+  const processedCandidates = useMemo(() => {
+    let result = [...candidates];
+
+    // Search query matching Name, Title, Summary, or Skills
+    if (searchVal.trim()) {
+      const q = searchVal.toLowerCase();
+      result = result.filter(c => 
+        (c['Candidate Name'] || '').toLowerCase().includes(q) ||
+        (c['Title'] || '').toLowerCase().includes(q) ||
+        (c['Skills'] || '').toLowerCase().includes(q) ||
+        (c['summary'] || '').toLowerCase().includes(q)
+      );
+    }
+
+    // Visa filter
+    if (activeFilters.visa !== "All") {
+      result = result.filter(c => (c['VISA'] || '').toLowerCase() === activeFilters.visa.toLowerCase());
+    }
+
+    // Location filter
+    if (activeFilters.location.trim()) {
+      const loc = activeFilters.location.toLowerCase();
+      result = result.filter(c => (c['Current Location'] || '').toLowerCase().includes(loc));
+    }
+
+    // Skills filter (must match all tagged skills)
+    if (activeFilters.skills.length > 0) {
+      result = result.filter(c => {
+        const cSkills = (c['Skills'] || '').toLowerCase();
+        return activeFilters.skills.every(s => cSkills.includes(s.toLowerCase()));
+      });
+    }
+
+    // Flags filters
+    if (activeFilters.hasEmail) result = result.filter(c => c['Email']);
+    if (activeFilters.hasLinkedIn) result = result.filter(c => c['LinkedIn']);
+    if (activeFilters.hasResume) result = result.filter(c => c['resume_url']);
+    if (activeFilters.favoritesOnly) result = result.filter(c => c['favorite']);
+
+    // Sort matching logic
+    if (sortOrder === "newest") {
+      result.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    } else if (sortOrder === "experience-asc") {
+      result.sort((a, b) => parseInt(a.experience || 0) - parseInt(b.experience || 0));
+    } else if (sortOrder === "experience-desc") {
+      result.sort((a, b) => parseInt(b.experience || 0) - parseInt(a.experience || 0));
+    }
+
+    return result;
+  }, [candidates, searchVal, activeFilters, sortOrder]);
+
+  // AI Sourcing execution
   const handleInitiateSourcing = async (e) => {
-    if (e) e.preventDefault();
-    
-    if (activeTab === 'jd' && !jdText.trim()) {
-      toast.error("Please paste a Job Description first.");
-      return;
-    }
-    if (activeTab === 'client' && !clientName.trim()) {
-      toast.error("Please enter a target client name first.");
-      return;
-    }
-    if (activeTab === 'keywords' && keywords.length === 0) {
-      toast.error("Please add at least one keyword first.");
-      return;
-    }
-
-    setIsAnalyzing(true);
-    setAnalysisStep(1); // Step 1: Ingesting
-
+    e.preventDefault();
+    setIsSourcing(true);
+    setSourcingStep(1); // analyzing
     await new Promise(r => setTimeout(r, 600));
-    setAnalysisStep(2); // Step 2: Mapping Competitors
+    setSourcingStep(2); // parsing competitor pools
+    await new Promise(r => setTimeout(r, 600));
+    setSourcingStep(3); // query mapping
 
-    await new Promise(r => setTimeout(r, 700));
-    setAnalysisStep(3); // Step 3: Database query mapping
-
-    await new Promise(r => setTimeout(r, 500));
-    
-    // Analyze input based on active tab
-    let analysisResult;
-    let clientLabel = "Sourcing Pipeline";
-    if (activeTab === 'jd') {
-      analysisResult = analyzeJobDescription(jdText, "");
-      clientLabel = "JD Sourcing Analysis";
-    } else if (activeTab === 'client') {
-      analysisResult = analyzeJobDescription("", clientName);
-      clientLabel = clientName.trim();
+    let result;
+    if (composerTab === 'jd') {
+      result = analyzeJobDescription(composerJd);
+    } else if (composerTab === 'client') {
+      result = analyzeJobDescription('', composerClient);
     } else {
-      analysisResult = analyzeKeywords(keywords);
-      clientLabel = "Keyword Sourcing Analysis";
+      result = analyzeJobDescription('', composerKeywords.join(', '));
     }
-    
-    // Run boolean search local match
-    let matches = applyBooleanSearch(analysisResult.query, candidates)
-      .map(c => {
-        const scoreRes = calculateMatchScore(c, analysisResult.query, {});
-        return { ...c, matchScore: scoreRes.score };
-      });
 
-    // Ezra should always show the most relevant profiles from the database; never return 0 results
-    if (matches.length === 0 && candidates.length > 0) {
-      matches = candidates
-        .map(c => {
-          const scoreRes = calculateMatchScore(c, analysisResult.query, {});
-          return { ...c, matchScore: scoreRes.score };
-        })
-        .sort((a, b) => b.matchScore - a.matchScore);
+    // Get matches
+    let matched = candidates.filter(c => {
+      const text = `${c['Title']} ${c['Skills']}`.toLowerCase();
+      return result.skills.some(s => text.includes(s.toLowerCase()));
+    });
+    if (matched.length === 0) matched = candidates.slice(0, 3);
+    else matched = matched.slice(0, 3);
+
+    setSourcingReport({
+      ...result,
+      client: composerClient || "My Pipeline",
+      matches: matched,
+    });
+    setIsSourcing(false);
+    setSourcingStep(0);
+    toast.success("AI matched pipeline ready!");
+  };
+
+  const handleApplyAISearch = (query) => {
+    setSearchVal(query);
+    const parsed = parseNaturalQuery(query);
+    setActiveFilters(prev => ({
+      ...prev,
+      visa: parsed.visa || "All",
+      location: parsed.location || "",
+      skills: [...new Set([...prev.skills, ...parsed.skills])],
+    }));
+    toast.success("AI search filters applied!");
+  };
+
+  // Chat message send handler
+  const handleSendChat = async (e) => {
+    e.preventDefault();
+    if (!ezraInput.trim()) return;
+
+    const userMsg = { sender: "user", text: ezraInput, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    setEzraMessages(prev => [...prev, userMsg]);
+    const query = ezraInput;
+    setEzraInput("");
+
+    setIsEzraTyping(true);
+    await new Promise(r => setTimeout(r, 1200));
+
+    // Simple NLP feedback
+    const parsed = parseNaturalQuery(query);
+    let replyText = "I parsed your request. ";
+    if (parsed.skills.length > 0 || parsed.visa || parsed.location) {
+      replyText += `I have applied these filters to the Directory: **${parsed.skills.join(', ')}** skills, **${parsed.visa || 'any'}** visa status, located in **${parsed.location || 'any'}**.`;
+      setActiveFilters(prev => ({
+        ...prev,
+        visa: parsed.visa || prev.visa,
+        location: parsed.location || prev.location,
+        skills: [...new Set([...prev.skills, ...parsed.skills])],
+      }));
     } else {
-      matches = matches.sort((a, b) => b.matchScore - a.matchScore);
+      replyText += "I searched the candidate directory, but no specific filter keywords matched. Let me know if you would like me to draft an outreach template or email instead.";
     }
 
-    const finalMatches = matches.slice(0, 3);
-
-    setReport({
-      client: clientLabel,
-      domain: analysisResult.domain,
-      competitors: analysisResult.competitors,
-      skills: analysisResult.skills,
-      query: analysisResult.query,
-      matches: finalMatches,
-      sourceType: activeTab
-    });
-    
-    setIsAnalyzing(false);
-    setAnalysisStep(0);
+    setEzraMessages(prev => [...prev, {
+      sender: "ezra",
+      text: replyText,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    }]);
+    setIsEzraTyping(false);
   };
 
-  const handleReset = () => {
-    setReport(null);
-    setClientName("");
-    setJdText("");
-    setKeywords([]);
-    setKeywordInput("");
-    setSelectedDashboardCandidate(null);
+  // Copy shareable portal link
+  const handleCopyShareLink = () => {
+    const link = `${window.location.origin}/candidate/upload`;
+    navigator.clipboard.writeText(link);
+    toast.success('Shareable candidate portal link copied to clipboard!');
   };
 
-  const handleClearInputs = () => {
-    setClientName("");
-    setJdText("");
-    setKeywords([]);
-    setKeywordInput("");
-  };
+  // Toggle favorite candidate
+  const handleToggleFavorite = async (cand) => {
+    const nextFav = !cand.favorite;
+    try {
+      const { error } = await supabase
+        .from('candidates')
+        .update({ favorite: nextFav })
+        .eq('id', cand.id);
+      if (error) throw error;
 
-  const handleToggleFavorite = async (candidateId) => {
-    if (report) {
-      const updatedMatches = report.matches.map(c => {
-        if (c.id === candidateId || c.candidate_uuid === candidateId) {
-          const nextFav = !c.favorite;
-          supabase
-            .from('candidates')
-            .update({ favorite: nextFav })
-            .or(`id.eq.${candidateId},candidate_uuid.eq.${candidateId}`)
-            .then(({ error }) => {
-              if (error) console.warn('Favorite update failed:', error.message);
-            });
-          return { ...c, favorite: nextFav };
-        }
-        return c;
-      });
-      setReport({ ...report, matches: updatedMatches });
-    }
-    setSelectedDashboardCandidate(prev => {
-      if (prev && (prev.id === candidateId || prev.candidate_uuid === candidateId)) {
-        return { ...prev, favorite: !prev.favorite };
+      setCandidates(prev => prev.map(c => c.id === cand.id ? { ...c, favorite: nextFav } : c));
+      if (selectedCandidate?.id === cand.id) {
+        setSelectedCandidate(prev => ({ ...prev, favorite: nextFav }));
       }
-      return prev;
-    });
-  };
-
-  const handleCandidateUpdate = (updatedCandidate) => {
-    if (report) {
-      const updatedMatches = report.matches.map(c => {
-        if (c.id === updatedCandidate.id || c.candidate_uuid === updatedCandidate.candidate_uuid) {
-          return { ...c, ...updatedCandidate };
-        }
-        return c;
-      });
-      setReport({ ...report, matches: updatedMatches });
+      toast.success(nextFav ? "Added to favorites!" : "Removed from favorites");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update favorite");
     }
-    setSelectedDashboardCandidate(prev => {
-      if (prev && (prev.id === updatedCandidate.id || prev.candidate_uuid === updatedCandidate.candidate_uuid)) {
-        return { ...prev, ...updatedCandidate };
-      }
-      return prev;
-    });
   };
 
-  const handleLaunchDatabase = (queryToRun) => {
-    navigate(`/recruiter/candidates?q=${encodeURIComponent(queryToRun)}`);
+  // Auto-save notes helper
+  const handleNoteSave = async (cand, text) => {
+    setSavingNote(true);
+    try {
+      const { error } = await supabase
+        .from('candidates')
+        .update({ notes: text })
+        .eq('id', cand.id);
+      if (error) throw error;
+
+      setCandidates(prev => prev.map(c => c.id === cand.id ? { ...c, notes: text } : c));
+      toast.success("Note saved successfully!");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingNote(false);
+    }
   };
 
   return (
     <div
       style={{
-        minHeight: 'calc(100vh - 56px)',
-        background: '#FFFFFF', // Pure white background
-        color: '#0F172A', // Dark slate text
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '24px 24px 48px', // Balanced padding
-        fontFamily: 'Inter, sans-serif',
-        position: 'relative',
-        overflow: 'hidden',
-        boxSizing: 'border-box',
+        minHeight: "calc(100vh - 56px)",
+        background: "var(--bg-soft)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
       }}
     >
-      {/* Floating Ambient Background Blobs */}
-      <FloatingBlob color="#EEF2F6" size={350} duration={18} delay={0} initialX="10%" initialY="20%" driftRange={30} />
-      <FloatingBlob color="#E2E8F0" size={400} duration={22} delay={2} initialX="50%" initialY="40%" driftRange={40} />
-      <FloatingBlob color="#F1F5F9" size={300} duration={15} delay={4} initialX="30%" initialY="10%" driftRange={25} />
+      {/* ── Sub Navigation Tab Selector ────────────────────── */}
+      <div
+        style={{
+          background: "var(--bg)",
+          padding: "0 24px",
+          borderBottom: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          flexShrink: 0,
+        }}
+      >
+        {[
+          { id: "dashboard", label: "Intelligent Overview" },
+          { id: "candidates", label: `Candidate Database (${processedCandidates.length})` },
+          { id: "analytics", label: "Analytics Insights" },
+        ].map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              className={`tab-trigger ${isActive ? "active" : ""}`}
+              onClick={() => navigate(`/recruiter/${tab.id}`)}
+              style={{
+                fontSize: 13.5,
+                fontWeight: isActive ? 600 : 500,
+                borderBottom: isActive ? "2px solid var(--primary)" : "2px solid transparent",
+                padding: "12px 18px",
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
 
-      <div style={{ width: '100%', maxWidth: 780, position: 'relative', zIndex: 1 }}>
-        
-        {/* Holographic Ezra Avatar Section */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: 24, gap: 10 }}>
-          <div
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: "50%",
-              background: "#F8FAFC", // Light gray background
-              border: "1.5px solid #E2E8F0",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#0F172A",
-              boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
-            }}
-          >
-            <Brain size={24} style={{ animation: isAnalyzing ? "spin 3s linear infinite" : "none" }} />
-          </div>
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ marginLeft: "auto", display: "flex", gap: 5 }}
+          onClick={handleCopyShareLink}
+        >
+          <ShareIcon size={12} />
+          Copy Candidate Link
+        </button>
+      </div>
 
-          <div>
-            <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px', color: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              Ezra Recruiting Core
-              <span style={{ fontSize: 9, color: '#475569', background: '#F8FAFC', border: '1px solid #E2E8F0', fontWeight: 600, padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                AI Recruiter
-              </span>
-            </h2>
-            <p style={{ fontSize: 13, color: '#475569', margin: 0, maxWidth: 520, lineHeight: 1.5 }}>
-              Ingesting talent pools, checking client competitors, and mapping work eligibilities to support recruiter pipelines.
-            </p>
-          </div>
-        </div>
-
+      {/* ── Tab Layout Renderers (with Page Transitions) ────── */}
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         <AnimatePresence mode="wait">
-          {/* STATE 1: Ezra Input Console */}
-          {!isAnalyzing && !report && (
+          {/* TAB 1: OVERVIEW & COMPOSER */}
+          {activeTab === "dashboard" && (
             <motion.div
-              key="input-form"
+              key="dashboard-view"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+              transition={{ duration: 0.25 }}
+              style={{ padding: "24px 32px", overflowY: "auto", flex: 1 }}
             >
-              {/* Sourcing Intake Panel — Claude/Modern AI Composer */}
+              {/* Sourcing Core Hero */}
               <div
                 style={{
-                  background: 'rgba(255, 255, 255, 0.8)', // Light glass card background
-                  backdropFilter: 'blur(16px)',
-                  border: '1px solid rgba(15, 23, 42, 0.08)',
-                  borderRadius: 16,
                   padding: 24,
-                  boxShadow: '0 20px 40px rgba(15, 23, 42, 0.05)',
+                  borderRadius: "var(--radius-xl)",
+                  background: "linear-gradient(135deg, #111827 0%, #1F2937 100%)",
+                  color: "#fff",
+                  marginBottom: 24,
+                  boxShadow: "var(--shadow-lg)",
                 }}
               >
-                {/* Tabs selection */}
-                <div style={{ display: 'flex', borderBottom: '1px solid rgba(15, 23, 42, 0.08)', gap: 20, marginBottom: 20 }}>
-                  {[
-                    { id: 'jd', label: 'Job Description', icon: <FileText size={14} /> },
-                    { id: 'client', label: 'Target Client', icon: <Building size={14} /> },
-                    { id: 'keywords', label: 'Sourcing Keywords', icon: <Layers size={14} /> }
-                  ].map(tab => {
-                    const active = activeTab === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setActiveTab(tab.id)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: active ? '#0F172A' : '#64748B',
-                          borderBottom: active ? '2px solid #0F172A' : '2px solid transparent',
-                          padding: '10px 4px',
-                          fontSize: 13,
-                          fontWeight: active ? 600 : 500,
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                        }}
-                      >
-                        {tab.icon}
-                        {tab.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                <h2 style={{ color: "#fff", fontSize: 22, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                  <Brain size={20} />
+                  Ezra AI Recruiting Core
+                </h2>
+                <p style={{ color: "var(--text-muted)", fontSize: 13.5, marginTop: 4, maxWidth: 580 }}>
+                  Ingest talent pools, map competitor overlap systems, and generate targeted candidate matching parameters.
+                </p>
+              </div>
 
-                <form onSubmit={handleInitiateSourcing} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Metrics Grid */}
+              <div className="grid-6" style={{ gap: 16, marginBottom: 28 }}>
+                {MOCK_METRICS.map((m) => (
+                  <div key={m.label} className="metric-card" style={{ padding: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                      <div className="metric-value" style={{ fontSize: 22 }}>{m.value}</div>
+                      <span className="badge badge-gray" style={{ fontSize: 10 }}>{m.delta}</span>
+                    </div>
+                    <div className="metric-label" style={{ fontSize: 12, marginTop: 0 }}>{m.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Sourcing Composer Grid */}
+              <div className="grid-2" style={{ gridTemplateColumns: "1.2fr 0.8fr", gap: 24, alignItems: "start" }}>
+                
+                {/* Left: composer inputs */}
+                <div className="card" style={{ padding: 24 }}>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Sourcing Composer</h3>
                   
-                  {/* Tab 1: JD Textarea */}
-                  {activeTab === 'jd' && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="input-group"
-                      style={{ margin: 0 }}
-                    >
+                  {/* Inner tabs selection */}
+                  <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', gap: 16, marginBottom: 20 }}>
+                    {[
+                      { id: 'jd', label: 'Job Description' },
+                      { id: 'client', label: 'Target Client' },
+                      { id: 'keywords', label: 'Keywords & Sourcing' }
+                    ].map(tab => {
+                      const active = composerTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setComposerTab(tab.id)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            borderBottom: active ? '2px solid var(--primary)' : '2px solid transparent',
+                            padding: '8px 2px',
+                            fontSize: 13,
+                            fontWeight: active ? 600 : 500,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <form onSubmit={handleInitiateSourcing} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    {composerTab === 'jd' && (
                       <textarea
                         rows={4}
                         className="input"
-                        placeholder="Paste job details, requirements, or a full description here... Ezra will automatically index skills, target locations, visa categories, and identify client competitor talent pools."
-                        value={jdText}
-                        onChange={(e) => setJdText(e.target.value)}
-                        style={{
-                          background: '#FFFFFF',
-                          border: '1.5px solid rgba(15, 23, 42, 0.08)',
-                          color: '#0F172A',
-                          borderRadius: 12,
-                          padding: '14px 16px',
-                          fontSize: 13.5,
-                          resize: 'none',
-                          minHeight: 120,
-                          fontFamily: 'inherit',
-                          lineHeight: 1.5,
-                          outline: 'none',
-                        }}
-                        onFocus={(e) => e.target.style.borderColor = 'rgba(15, 23, 42, 0.2)'}
-                        onBlur={(e) => e.target.style.borderColor = 'rgba(15, 23, 42, 0.08)'}
+                        placeholder="Paste full job description requirements here..."
+                        value={composerJd}
+                        onChange={(e) => setComposerJd(e.target.value)}
+                        style={{ resize: "none" }}
                       />
-                    </motion.div>
-                  )}
-
-                  {/* Tab 2: Client Name */}
-                  {activeTab === 'client' && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="input-group"
-                      style={{ margin: 0 }}
-                    >
+                    )}
+                    {composerTab === 'client' && (
                       <input
                         type="text"
                         className="input"
-                        placeholder="Enter target client name (e.g. Capital One, Snowflake, Apple, Stripe, Databricks)..."
-                        value={clientName}
-                        onChange={(e) => setClientName(e.target.value)}
-                        style={{
-                          background: '#FFFFFF',
-                          border: '1.5px solid rgba(15, 23, 42, 0.08)',
-                          color: '#0F172A',
-                          borderRadius: 12,
-                          padding: '12px 16px',
-                          fontSize: 13.5,
-                          outline: 'none',
-                        }}
-                        onFocus={(e) => e.target.style.borderColor = 'rgba(15, 23, 42, 0.2)'}
-                        onBlur={(e) => e.target.style.borderColor = 'rgba(15, 23, 42, 0.08)'}
+                        placeholder="Enter competitor client name (e.g. Snowflake, Capital One)..."
+                        value={composerClient}
+                        onChange={(e) => setComposerClient(e.target.value)}
                       />
-                      <span className="input-hint" style={{ color: '#64748B', fontSize: 11, marginTop: 6, display: 'block' }}>
-                        Ezra leverages predefined profiles to map industry spaces, find target competitors, and match candidates from those firms.
-                      </span>
-                    </motion.div>
-                  )}
-
-                  {/* Tab 3: Keywords Tag Composer */}
-                  {activeTab === 'keywords' && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-                    >
-                      <div
-                        onClick={() => document.getElementById('keyword-composer-input')?.focus()}
-                        style={{
-                          background: '#FFFFFF',
-                          border: '1.5px solid rgba(15, 23, 42, 0.08)',
-                          borderRadius: 12,
-                          padding: '10px 14px',
-                          minHeight: 80,
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: 6,
-                          alignContent: 'flex-start',
-                          cursor: 'text',
-                        }}
-                      >
-                        <AnimatePresence>
-                          {keywords.map(kw => (
-                            <motion.span
-                              key={kw}
-                              initial={{ scale: 0.8, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              exit={{ scale: 0.8, opacity: 0 }}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                background: '#F1F5F9',
-                                border: '1px solid #E2E8F0',
-                                color: '#334155',
-                                padding: '3px 10px',
-                                borderRadius: 8,
-                                fontSize: 12,
-                                fontWeight: 500,
-                              }}
-                            >
+                    )}
+                    {composerTab === 'keywords' && (
+                      <div className="input-group">
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="Type keyword and press Enter..."
+                          value={composerKeywordInput}
+                          onChange={(e) => setComposerKeywordInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              if (composerKeywordInput.trim()) {
+                                setComposerKeywords([...composerKeywords, composerKeywordInput.trim()]);
+                                setComposerKeywordInput("");
+                              }
+                            }
+                          }}
+                        />
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                          {composerKeywords.map(kw => (
+                            <span key={kw} className="tag">
                               {kw}
                               <button
                                 type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setKeywords(keywords.filter(k => k !== kw));
-                                }}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  color: '#64748B',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  padding: 0,
-                                }}
+                                style={{ background: "none", border: "none", color: "var(--text-muted)", marginLeft: 6 }}
+                                onClick={() => setComposerKeywords(composerKeywords.filter(k => k !== kw))}
                               >
-                                <X size={11} />
+                                ×
                               </button>
-                            </motion.span>
+                            </span>
                           ))}
-                        </AnimatePresence>
-                        
-                        <input
-                          id="keyword-composer-input"
-                          type="text"
-                          value={keywordInput}
-                          onChange={(e) => setKeywordInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ',') {
-                              e.preventDefault();
-                              const val = keywordInput.trim().replace(/,$/, '');
-                              if (val && !keywords.includes(val)) {
-                                setKeywords([...keywords, val]);
-                              }
-                              setKeywordInput("");
-                            } else if (e.key === 'Backspace' && !keywordInput && keywords.length > 0) {
-                              setKeywords(keywords.slice(0, -1));
-                            }
-                          }}
-                          placeholder={keywords.length === 0 ? "Type skills, locations, or visa statuses (e.g. Snowflake, Texas, H1B) and press Enter..." : ""}
-                          style={{
-                            flex: 1,
-                            background: 'transparent',
-                            border: 'none',
-                            outline: 'none',
-                            color: '#0F172A',
-                            fontSize: 13,
-                            minWidth: 160,
-                            padding: '4px 0',
-                            fontFamily: 'inherit',
-                          }}
-                        />
+                        </div>
                       </div>
+                    )}
 
-                      {/* Keyword quick suggestions */}
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <span style={{ fontSize: 11.5, color: '#64748B', fontWeight: 600 }}>Quick add:</span>
-                        {['Snowflake', 'Python', 'AWS', 'Java', 'H1B', 'Green Card', 'Texas', 'California'].map(item => (
-                          <button
-                            key={item}
-                            type="button"
-                            onClick={() => {
-                              if (!keywords.includes(item)) {
-                                setKeywords([...keywords, item]);
-                              }
-                            }}
-                            style={{
-                              background: '#F8FAFC',
-                              border: '1px solid #E2E8F0',
-                              color: '#64748B',
-                              padding: '3px 10px',
-                              borderRadius: '99px',
-                              fontSize: 11,
-                              cursor: 'pointer',
-                              transition: 'all 0.15s',
-                            }}
-                            onMouseEnter={e => {
-                              e.currentTarget.style.borderColor = '#CBD5E1';
-                              e.currentTarget.style.color = '#0F172A';
-                            }}
-                            onMouseLeave={e => {
-                              e.currentTarget.style.borderColor = '#E2E8F0';
-                              e.currentTarget.style.color = '#64748B';
-                            }}
-                          >
-                            + {item}
-                          </button>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {/* Composer Footer Actions */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      borderTop: '1px solid rgba(15, 23, 42, 0.08)',
-                      paddingTop: 16,
-                      marginTop: 4,
-                    }}
-                  >
-                    <div style={{ fontSize: 11, color: '#64748B', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Brain size={12} />
-                      <span>Virtual Recruiter Copilot</span>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      {(jdText || clientName || keywords.length > 0) && (
-                        <button
-                          type="button"
-                          onClick={handleClearInputs}
-                          style={{
-                            background: 'transparent',
-                            border: '1px solid #E2E8F0',
-                            color: '#64748B',
-                            borderRadius: 8,
-                            padding: '6px 14px',
-                            fontSize: 12.5,
-                            cursor: 'pointer',
-                            fontWeight: 500,
-                            transition: 'all 0.15s',
-                          }}
-                          onMouseEnter={e => {
-                            e.currentTarget.style.borderColor = '#CBD5E1';
-                            e.currentTarget.style.color = '#0F172A';
-                          }}
-                          onMouseLeave={e => {
-                            e.currentTarget.style.borderColor = '#E2E8F0';
-                            e.currentTarget.style.color = '#64748B';
-                          }}
-                        >
-                          Clear
-                        </button>
-                      )}
-                      
-                      <button
-                        type="submit"
-                        style={{
-                          background: '#0F172A', // clean dark primary button
-                          border: 'none',
-                          color: '#FFFFFF',
-                          borderRadius: 8,
-                          padding: '8px 18px',
-                          fontSize: 12.5,
-                          fontWeight: 600,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          cursor: 'pointer',
-                          transition: 'opacity 0.15s',
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
-                        onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                      >
-                        <Sparkles size={13} />
-                        Source Candidates
-                      </button>
-                    </div>
-                  </div>
-
-                </form>
-              </div>
-
-              {/* Ezra Empathy/Staffing Grind Footer */}
-              <div
-                style={{
-                  background: 'rgba(248, 250, 252, 0.6)',
-                  border: '1px dashed rgba(15, 23, 42, 0.08)',
-                  borderRadius: 12,
-                  padding: 16,
-                  display: 'flex',
-                  gap: 12,
-                  alignItems: 'flex-start',
-                }}
-              >
-                <Cpu size={16} style={{ color: '#64748B', marginTop: 2, flexShrink: 0 }} />
-                <div>
-                  <h4 style={{ fontSize: 12.5, margin: '0 0 4px', color: '#1E293B', fontWeight: 600 }}>
-                    Empathetic AI Recruiter Core
-                  </h4>
-                  <p style={{ fontSize: 12, color: '#64748B', lineHeight: 1.5, margin: 0 }}>
-                    Recruitment is hard work. Manually compiling Boolean strings, parsing candidate work authorizations, and double-checking target pools takes hours. Drop your requirements, client targets, or keywords. I will immediately analyze the domain, list key competitor companies, output clean Boolean filters, and source from your talent database.
-                  </p>
+                    <button className="btn btn-primary btn-md" type="submit" disabled={isSourcing}>
+                      <Sparkles size={14} />
+                      AI Match Candidates
+                    </button>
+                  </form>
                 </div>
+
+                {/* Right: recent activities & matching list */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <div className="card" style={{ padding: 24 }}>
+                    <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>AI Matching Results</h3>
+                    
+                    {sourcingReport ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+                          Sourced pipeline for: <strong>{sourcingReport.client}</strong>
+                        </p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {sourcingReport.matches.map(cand => (
+                            <div
+                              key={cand.id}
+                              className="card-sm card-hover"
+                              style={{ padding: 12 }}
+                              onClick={() => {
+                                setSelectedCandidate(cand);
+                                navigate('/recruiter/candidates');
+                              }}
+                            >
+                              <div style={{ fontWeight: 600 }}>{cand['Candidate Name']}</div>
+                              <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>{cand['Title']}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="empty-state" style={{ padding: "24px 0" }}>
+                        <Info size={24} style={{ color: "var(--text-muted)" }} />
+                        <p style={{ fontSize: 13 }}>No matches calculated yet. Run composer on the left.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
               </div>
             </motion.div>
           )}
 
-          {/* STATE 2: Sourcing Loading Steps */}
-          {isAnalyzing && (
+          {/* TAB 2: CANDIDATE DIRECTORY & AI CHAT */}
+          {activeTab === "candidates" && (
             <motion.div
-              key="loader"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.98 }}
-              style={{
-                background: 'rgba(255, 255, 255, 0.8)',
-                backdropFilter: 'blur(16px)',
-                border: '1px solid rgba(15, 23, 42, 0.08)',
-                borderRadius: 16,
-                padding: 30,
-                textAlign: 'center',
-                boxShadow: '0 20px 40px rgba(15, 23, 42, 0.05)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 20,
-              }}
+              key="candidates-view"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ display: "flex", flex: 1, overflow: "hidden" }}
             >
-              {/* Spinner */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#94A3B8', animation: 'blink 1.4s infinite 0.2s' }} />
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#94A3B8', animation: 'blink 1.4s infinite 0.4s' }} />
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#94A3B8', animation: 'blink 1.4s infinite 0.6s' }} />
-              </div>
-
-              {/* Steps Log */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 360, textAlign: 'left' }}>
-                {[
-                  { id: 1, label: "Ingesting sourcing criteria & parsing values..." },
-                  { id: 2, label: "Mapping target domains & competitor pools..." },
-                  { id: 3, label: "Scanning database & fetching candidate matches..." }
-                ].map((step) => {
-                  const active = analysisStep === step.id;
-                  const completed = analysisStep > step.id;
-                  return (
-                    <div
-                      key={step.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        color: completed ? '#10B981' : active ? '#0F172A' : '#64748B',
-                        fontWeight: active ? 600 : 400,
-                        fontSize: 12.5,
-                        transition: 'color 0.2s',
-                      }}
-                    >
-                      {completed ? (
-                        <CheckCircle2 size={14} style={{ color: '#10B981', flexShrink: 0 }} />
-                      ) : active ? (
-                        <RefreshCw size={12} style={{ animation: "spin 1s linear infinite", color: '#64748B', flexShrink: 0 }} />
-                      ) : (
-                        <div style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid #E2E8F0', flexShrink: 0 }} />
-                      )}
-                      <span>{step.label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
-
-          {/* STATE 3: Intelligence Report */}
-          {report && (
-            <motion.div
-              key="report"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
-            >
-              {/* Intel Dashboard Card */}
+              {/* Left filter bar */}
               <div
                 style={{
-                  background: 'rgba(255, 255, 255, 0.8)',
-                  backdropFilter: 'blur(16px)',
-                  border: '1px solid rgba(15, 23, 42, 0.08)',
-                  borderRadius: 16,
-                  padding: 24,
-                  boxShadow: '0 20px 40px rgba(15, 23, 42, 0.05)',
+                  width: 250,
+                  borderRight: "1px solid var(--border)",
+                  background: "var(--bg)",
+                  display: "flex",
+                  flexDirection: "column",
+                  overflowY: "auto",
+                  padding: 20,
+                  gap: 20,
+                  flexShrink: 0,
                 }}
               >
-                {/* Header Action */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid rgba(15, 23, 42, 0.08)', paddingBottom: 12 }}>
-                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Terminal size={15} style={{ color: '#64748B' }} /> Sourcing Intelligence Report
-                  </h3>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h4 style={{ margin: 0, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-secondary)" }}>
+                    Filters
+                  </h4>
                   <button
-                    onClick={handleReset}
-                    style={{
-                      background: 'transparent',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: 8,
-                      fontSize: 12,
-                      padding: '4px 12px',
-                      color: '#64748B',
-                      cursor: 'pointer',
-                      fontWeight: 500,
-                      transition: 'all 0.15s',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.color = '#0F172A'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.color = '#64748B'; }}
+                    className="btn btn-ghost btn-sm"
+                    style={{ padding: 4, fontSize: 11 }}
+                    onClick={() => setActiveFilters({
+                      visa: "All", location: "", skills: [], experience: 0,
+                      hasEmail: false, hasLinkedIn: false, hasResume: false, favoritesOnly: false,
+                    })}
                   >
-                    Reset Sourcing
+                    Clear All
                   </button>
                 </div>
 
-                {/* Two Column Layout: Left Ezra AI Analysis / Right Sourcing Outputs */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: 24 }}>
-                  
-                  {/* Left Column: Ezra Commentary Box */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    
-                    {/* Ezra Dialogue bubble */}
-                    <div
-                      style={{
-                        background: 'rgba(248, 250, 252, 0.6)',
-                        border: '1px solid rgba(15, 23, 42, 0.06)',
-                        borderRadius: 12,
-                        padding: 16,
-                        position: 'relative',
-                      }}
-                    >
-                      {/* Avatar header */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                        <div
-                          style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: '50%',
-                            background: '#F8FAFC',
-                            border: '1.5px solid #E2E8F0',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: '#0F172A',
-                          }}
-                        >
-                          <Brain size={14} />
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A' }}>Ezra AI Agent</div>
-                          <div style={{ fontSize: 10, color: '#64748B' }}>Recruiter Copilot</div>
-                        </div>
-                      </div>
+                {/* Visa Dropdown */}
+                <div className="input-group">
+                  <label className="input-label">Visa Status</label>
+                  <select
+                    className="input"
+                    value={activeFilters.visa}
+                    onChange={(e) => setActiveFilters({ ...activeFilters, visa: e.target.value })}
+                  >
+                    {VISA_OPTIONS.map(v => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                </div>
 
-                      <p style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-line' }}>
-                        {getEzraCommentary(report)}
+                {/* Location text input */}
+                <div className="input-group">
+                  <label className="input-label">Location</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g. Texas, Austin"
+                    value={activeFilters.location}
+                    onChange={(e) => setActiveFilters({ ...activeFilters, location: e.target.value })}
+                  />
+                </div>
+
+                {/* Skills tags composer */}
+                <div className="input-group">
+                  <label className="input-label">Skills</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="Add skill..."
+                    value={skillInput}
+                    onChange={(e) => setSkillInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && skillInput.trim()) {
+                        e.preventDefault();
+                        if (!activeFilters.skills.includes(skillInput.trim())) {
+                          setActiveFilters({ ...activeFilters, skills: [...activeFilters.skills, skillInput.trim()] });
+                        }
+                        setSkillInput("");
+                      }
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
+                    {activeFilters.skills.map(s => (
+                      <span key={s} className="tag">
+                        {s}
+                        <button
+                          type="button"
+                          style={{ background: "none", border: "none", color: "var(--text-muted)", marginLeft: 4 }}
+                          onClick={() => setActiveFilters({ ...activeFilters, skills: activeFilters.skills.filter(x => x !== s) })}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Toggles */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+                  {[
+                    { label: "Has Email", key: "hasEmail" },
+                    { label: "Has LinkedIn", key: "hasLinkedIn" },
+                    { label: "Has Resume", key: "hasResume" },
+                    { label: "Favorites Only", key: "favoritesOnly" },
+                  ].map(f => (
+                    <label key={f.key} className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={activeFilters[f.key]}
+                        onChange={(e) => setActiveFilters({ ...activeFilters, [f.key]: e.target.checked })}
+                      />
+                      {f.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Middle Candidates list area */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                {/* Search query row */}
+                <div
+                  style={{
+                    padding: 16,
+                    borderBottom: "1px solid var(--border)",
+                    background: "var(--bg)",
+                    display: "flex",
+                    gap: 12,
+                  }}
+                >
+                  <div className="search-bar flex-1" style={{ maxWidth: 540 }}>
+                    <Search size={14} style={{ color: "var(--text-muted)" }} />
+                    <input
+                      type="text"
+                      placeholder="Search candidate directory, titles, summaries, skills..."
+                      value={searchVal}
+                      onChange={(e) => setSearchVal(e.target.value)}
+                    />
+                  </div>
+
+                  <select
+                    className="input"
+                    style={{ width: 140 }}
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value)}
+                  >
+                    <option value="newest">Newest</option>
+                    <option value="experience-desc">Exp (high to low)</option>
+                    <option value="experience-asc">Exp (low to high)</option>
+                  </select>
+
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setIsEzraOpen(!isEzraOpen)}
+                    style={{ display: "flex", gap: 6 }}
+                  >
+                    <MessageSquare size={14} />
+                    Ask Ezra
+                  </button>
+                </div>
+
+                {/* Candidate card grid list */}
+                <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+                  {loading ? (
+                    <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
+                      <Loader2 size={36} style={{ animation: "spin 1.2s linear infinite" }} />
+                    </div>
+                  ) : processedCandidates.length === 0 ? (
+                    <div className="empty-state">
+                      <Info size={36} />
+                      <p>No candidates found matching current queries/filters.</p>
+                    </div>
+                  ) : (
+                    <div className="candidates-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
+                      {processedCandidates.map((cand) => {
+                        const avatarInfo = getAvatarColor(cand['Candidate Name']);
+                        return (
+                          <motion.div
+                            key={cand.id}
+                            className={`cand-card ${selectedCandidate?.id === cand.id ? "selected" : ""}`}
+                            onClick={() => setSelectedCandidate(cand)}
+                            style={{ position: "relative" }}
+                            layoutId={`cand-card-${cand.id}`}
+                          >
+                            <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
+                              <div
+                                className="avatar avatar-md"
+                                style={{
+                                  background: avatarInfo.bg,
+                                  color: avatarInfo.text,
+                                  width: 40, height: 40,
+                                  fontSize: 14,
+                                }}
+                              >
+                                {cand['Candidate Name'] ? cand['Candidate Name'].split(' ').slice(0,2).map(n=>n[0]).join('') : "?"}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <h4 style={{ margin: 0, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  {cand['Candidate Name'] || "Unknown"}
+                                </h4>
+                                <p style={{ fontSize: 12, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  {cand['Title'] || "Job Seeker"}
+                                </p>
+                              </div>
+
+                              <button
+                                style={{
+                                  background: "none", border: "none", color: cand.favorite ? "var(--error)" : "var(--text-muted)",
+                                  cursor: "pointer", padding: 2,
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleFavorite(cand);
+                                }}
+                              >
+                                <Heart size={14} fill={cand.favorite ? "var(--error)" : "none"} />
+                              </button>
+                            </div>
+
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                              {cand['VISA'] && <span className="badge badge-blue" style={{ fontSize: 10 }}>{cand['VISA']}</span>}
+                              {cand['Current Location'] && (
+                                <span className="badge badge-gray" style={{ fontSize: 10, display: "flex", gap: 2 }}>
+                                  <MapPin size={9} />
+                                  {cand['Current Location']}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Skills slice preview */}
+                            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                              {(cand['Skills'] || "").split(/[|,]/).slice(0, 4).map((s, idx) => (
+                                <span key={idx} className="tag" style={{ fontSize: 10, padding: "1px 6px" }}>{s.trim()}</span>
+                              ))}
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: Slide-over detailed candidate profile drawer */}
+              <AnimatePresence>
+                {selectedCandidate && (
+                  <motion.div
+                    initial={{ x: "100%", opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: "100%", opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 280, damping: 26 }}
+                    style={{
+                      width: 380,
+                      borderLeft: "1px solid var(--border)",
+                      background: "var(--bg)",
+                      display: "flex",
+                      flexDirection: "column",
+                      overflowY: "auto",
+                      padding: 24,
+                      gap: 20,
+                      zIndex: 30,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Profile Details</h3>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setSelectedCandidate(null)} style={{ padding: 4 }}>
+                        <X size={16} />
+                      </button>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      <div
+                        className="avatar avatar-lg"
+                        style={{
+                          background: getAvatarColor(selectedCandidate['Candidate Name']).bg,
+                          color: getAvatarColor(selectedCandidate['Candidate Name']).text,
+                          width: 52, height: 52,
+                        }}
+                      >
+                        {selectedCandidate['Candidate Name'] ? selectedCandidate['Candidate Name'].split(' ').slice(0,2).map(n=>n[0]).join('') : "?"}
+                      </div>
+                      <div>
+                        <h4 style={{ margin: 0 }}>{selectedCandidate['Candidate Name']}</h4>
+                        <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0 }}>{selectedCandidate['Title']}</p>
+                      </div>
+                    </div>
+
+                    <div className="divider" />
+
+                    {/* Metadata fields */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {[
+                        { label: "Email", value: selectedCandidate['Email'] || "—", icon: Mail },
+                        { label: "Phone", value: selectedCandidate['Contact No'] || "—", icon: Phone },
+                        { label: "Location", value: selectedCandidate['Current Location'] || "—", icon: MapPin },
+                        { label: "Visa Status", value: selectedCandidate['VISA'] || "—", icon: Shield },
+                      ].map((item) => (
+                        <div key={item.label} className="info-row" style={{ padding: "6px 0" }}>
+                          <span className="info-label flex items-center gap-2" style={{ minWidth: 90 }}>
+                            <item.icon size={12} />
+                            {item.label}
+                          </span>
+                          <span className="info-value" style={{ fontSize: 12.5 }}>{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="divider" />
+
+                    {/* Summary */}
+                    <div>
+                      <p className="section-title">Summary</p>
+                      <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                        {selectedCandidate['summary'] || "No profile summary available."}
                       </p>
                     </div>
 
-                    {/* Target skills info */}
-                    <div style={{ background: 'rgba(248, 250, 252, 0.4)', border: '1px solid rgba(15, 23, 42, 0.04)', borderRadius: 12, padding: 14 }}>
-                      <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, fontWeight: 700 }}>
-                        Identified Skills Stack
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {report.skills.map((s, i) => (
-                          <span key={i} style={{ fontSize: 10.5, background: '#F1F5F9', border: '1px solid #E2E8F0', color: '#334155', padding: '2px 6px', borderRadius: 4 }}>
-                            {s}
-                          </span>
-                        ))}
-                        {report.skills.length === 0 && (
-                          <span style={{ fontSize: 11.5, color: '#64748B', fontStyle: 'italic' }}>
-                            Generic keywords sourcing.
-                          </span>
-                        )}
-                      </div>
+                    {/* Recruiter Notes Area */}
+                    <div>
+                      <p className="section-title">Internal Notes</p>
+                      <textarea
+                        rows={3}
+                        className="input"
+                        placeholder="Add candidate notes here... (auto-saves)"
+                        defaultValue={selectedCandidate.notes || ""}
+                        onBlur={(e) => handleNoteSave(selectedCandidate, e.target.value)}
+                        style={{ fontSize: 12.5, resize: "vertical" }}
+                      />
                     </div>
 
-                  </div>
+                    {/* Outbound AI outreach email template link */}
+                    <button
+                      className="btn btn-secondary btn-full"
+                      onClick={() => {
+                        setEmailDraft({
+                          to: selectedCandidate['Email'] || "",
+                          subject: `EzHire Staffing opportunity: ${selectedCandidate['Title'] || "Technical Role"}`,
+                          body: `Hello ${selectedCandidate['Candidate Name']},\n\nWe came across your profile and were impressed by your work in ${selectedCandidate['Skills']?.split(/[|,]/)[0] || "your technical field"}.\n\nAre you available for a quick introductory call?`,
+                        });
+                        setIsEmailModalOpen(true);
+                      }}
+                    >
+                      <Mail size={13} />
+                      Draft Outreach Email
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-                  {/* Right Column: Sourcing Outputs & Pipelines */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    
-                    {/* Boolean query box */}
-                    <div style={{ background: '#F8FAFC', border: '1px solid rgba(15, 23, 42, 0.04)', borderRadius: 12, padding: 14 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <span style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
-                          Formulated Boolean Query
-                        </span>
-                        <span style={{ fontSize: 9, color: '#10B981', background: 'rgba(16, 185, 129, 0.1)', padding: '2px 6px', borderRadius: 4, fontWeight: 600 }}>
-                          Optimized
-                        </span>
+              {/* Ezra AI Chat Panel on Right side */}
+              <AnimatePresence>
+                {isEzraOpen && (
+                  <motion.div
+                    initial={{ x: "100%", opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    exit={{ x: "100%", opacity: 0 }}
+                    className="ezra-panel"
+                    style={{ zIndex: 30 }}
+                  >
+                    <div className="ezra-header">
+                      <div className="ezra-avatar">E</div>
+                      <div>
+                        <h4 style={{ margin: 0 }}>Ezra Copilot</h4>
+                        <span style={{ fontSize: 10, color: "var(--text-muted)" }}>AI Recruiter core active</span>
                       </div>
-                      <code style={{ display: 'block', fontSize: 12, color: '#0F172A', fontFamily: 'monospace', wordBreak: 'break-all', padding: 8, background: '#FFFFFF', borderRadius: 6, border: '1px solid rgba(15, 23, 42, 0.06)' }}>
-                        {report.query}
-                      </code>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setIsEzraOpen(false)} style={{ marginLeft: "auto", padding: 4 }}>
+                        <X size={16} />
+                      </button>
                     </div>
 
-                    {/* Target competitors box */}
-                    <div style={{ background: 'rgba(248, 250, 252, 0.4)', border: '1px solid rgba(15, 23, 42, 0.04)', borderRadius: 12, padding: 14 }}>
-                      <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, fontWeight: 700 }}>
-                        Target Sourcing Pool (Competitor Firms)
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
-                        {report.competitors.map((comp, idx) => (
-                          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#334155' }}>
-                            <span style={{ width: 14, height: 14, borderRadius: '50%', background: '#F1F5F9', border: '1px solid #E2E8F0', color: '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700 }}>
-                              {idx + 1}
-                            </span>
-                            <span>{comp}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Matched candidates database list */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
-                          Pipeline Matches ({report.matches.length})
-                        </span>
-                        <button
-                          onClick={() => handleLaunchDatabase(report.query)}
-                          style={{
-                            background: 'transparent',
-                            border: '1px solid #E2E8F0',
-                            color: '#334155',
-                            borderRadius: 8,
-                            padding: '4px 10px',
-                            fontSize: 11.5,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            fontWeight: 600,
-                            transition: 'all 0.15s',
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                        >
-                          Review All Pipeline <ArrowRight size={11} />
-                        </button>
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {report.matches.map((c, i) => (
-                          <div
-                            key={i}
-                            onClick={() => setSelectedDashboardCandidate(c)}
-                            style={{
-                              background: 'rgba(248, 250, 252, 0.6)',
-                              border: '1px solid rgba(15, 23, 42, 0.06)',
-                              borderRadius: 8,
-                              padding: '8px 12px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s',
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.borderColor = 'rgba(15, 23, 42, 0.15)';
-                              e.currentTarget.style.background = '#F1F5F9';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.borderColor = 'rgba(15, 23, 42, 0.06)';
-                              e.currentTarget.style.background = 'rgba(248, 250, 252, 0.6)';
-                            }}
-                          >
-                            <div style={{ minWidth: 0, flex: 1 }}>
-                              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F172A' }}>
-                                {c["Candidate Name"]}
-                              </div>
-                              <div style={{ fontSize: 11, color: '#475569', marginTop: 3, display: 'flex', alignItems: 'center', gap: 8 }} className="truncate">
-                                <span>{c["Title"] || "Specialist"}</span>
-                                {c["Current Location"] && (
-                                  <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                    <MapPin size={10} style={{ color: '#64748B' }} />
-                                    {c["Current Location"]}
-                                  </span>
-                                )}
-                                {c["VISA"] && (
-                                  <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                    <Shield size={10} style={{ color: '#64748B' }} />
-                                    {c["VISA"]}
-                                  </span>
-                                )}
-                              </div>
+                    {/* Chat Messages */}
+                    <div className="ezra-messages">
+                      {ezraMessages.map((msg, i) => (
+                        <div key={i} className={msg.sender === "user" ? "msg-user" : "msg-ezra"}>
+                          {msg.sender === "ezra" && <div className="msg-ezra-mini-avatar">E</div>}
+                          <div className="msg-ezra-content">
+                            <div className={msg.sender === "user" ? "msg-user-bubble" : "msg-ezra-bubble"}>
+                              {msg.text}
                             </div>
-
-                            <div
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: '#334155',
-                                background: '#F1F5F9',
-                                border: '1px solid #E2E8F0',
-                                padding: '2px 8px',
-                                borderRadius: '99px',
-                                flexShrink: 0,
-                                marginLeft: 12,
-                              }}
-                            >
-                              {c.matchScore}% Match
-                            </div>
+                            <span className="msg-time">{msg.time}</span>
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      ))}
+                      {isEzraTyping && (
+                        <div className="msg-ezra">
+                          <div className="msg-ezra-mini-avatar">E</div>
+                          <div className="typing-indicator">
+                            <div className="typing-dot" />
+                            <div className="typing-dot" />
+                            <div className="typing-dot" />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                  </div>
+                    {/* Suggested Prompt chips */}
+                    {ezraMessages.length === 1 && (
+                      <div className="ezra-chips">
+                        {SUGGESTED_CHIPS.map((chip, i) => (
+                          <button key={i} className="prompt-chip" onClick={() => handleApplyAISearch(chip)}>
+                            {chip}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
+                    {/* Chat input */}
+                    <form onSubmit={handleSendChat} className="ezra-input-bar">
+                      <input
+                        type="text"
+                        placeholder="Type sourcing request..."
+                        value={ezraInput}
+                        onChange={(e) => setEzraInput(e.target.value)}
+                        className="ezra-input"
+                      />
+                      <button type="submit" className="ezra-send-btn">
+                        <Send size={14} />
+                      </button>
+                    </form>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          )}
+
+          {/* TAB 3: ANALYTICS */}
+          {activeTab === "analytics" && (
+            <motion.div
+              key="analytics-view"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.25 }}
+              style={{ padding: "24px 32px", overflowY: "auto", flex: 1 }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                <div>
+                  <h2>Analytics Dashboard</h2>
+                  <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2 }}>
+                    Recruiter sourcing stats and insights
+                  </p>
                 </div>
 
+                {/* Period selectors */}
+                <div style={{ display: "flex", gap: 4, background: "var(--bg-muted)", borderRadius: "var(--radius-md)", padding: 4 }}>
+                  {ANALYTICS_PERIODS.map(p => (
+                    <button
+                      key={p}
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setAnalyticsPeriod(p)}
+                      style={{
+                        background: analyticsPeriod === p ? "var(--bg)" : "transparent",
+                        color: analyticsPeriod === p ? "var(--text-primary)" : "var(--text-muted)",
+                        boxShadow: analyticsPeriod === p ? "var(--shadow-xs)" : "none",
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Stats Cards */}
+              <div className="grid-4" style={{ gap: 16, marginBottom: 24 }}>
+                {[
+                  { label: "Total Profiles", value: "48,291", delta: "+12.4%", Icon: UsersIcon },
+                  { label: "Resumes Parsed", value: "41,203", delta: "+8.2%", Icon: FileText },
+                  { label: "Avg Time to Fill", value: "12 days", delta: "-2.1 days", Icon: Clock },
+                  { label: "Placement Rate", value: "68.4%", delta: "+4.2%", Icon: Target },
+                ].map((stat, i) => (
+                  <div key={i} className="metric-card">
+                    <div className="metric-value">{stat.value}</div>
+                    <div className="metric-label">{stat.label}</div>
+                    <div className="metric-delta text-success" style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 8 }}>
+                      <TrendingUp size={12} />
+                      {stat.delta}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Graph charts Side-by-Side */}
+              <div className="grid-2" style={{ gap: 20, marginBottom: 24 }}>
+                <div className="card" style={{ padding: 20 }}>
+                  <h4 style={{ marginBottom: 12 }}>Candidate Growth Over Time</h4>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={GROWTH_DATA}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Line type="monotone" dataKey="candidates" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="card" style={{ padding: 20 }}>
+                  <h4 style={{ marginBottom: 12 }}>Resume Upload Trends</h4>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={UPLOAD_DATA}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Bar dataKey="resumes" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Leaderboard tables */}
+              <div className="grid-2" style={{ gap: 20 }}>
+                <div className="card" style={{ padding: 20 }}>
+                  <h4 style={{ marginBottom: 12 }}>Top Sourced Skills</h4>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {DEMO_SKILLS.slice(0, 5).map(s => (
+                      <div key={s.name} style={{ display: "flex", justifyBetween: true, alignItems: "center" }}>
+                        <span style={{ fontSize: 13, fontWeight: 500 }}>{s.name}</span>
+                        <div style={{ flex: 1, height: 6, background: "var(--bg-muted)", borderRadius: 3, margin: "0 12px", overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${s.pct}%`, background: "var(--primary)" }} />
+                        </div>
+                        <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{s.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="card" style={{ padding: 20 }}>
+                  <h4 style={{ marginBottom: 12 }}>Recruiter Productivity Leaderboard</h4>
+                  <div className="table-wrap" style={{ border: "none" }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Recruiter</th>
+                          <th>Added</th>
+                          <th>Searches</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {RECRUITERS.map(r => (
+                          <tr key={r.name}>
+                            <td>{r.name}</td>
+                            <td>{r.added}</td>
+                            <td>{r.searches}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-
       </div>
 
-      {/* Dynamic Profile Review Sliding Drawer Panel */}
+      {/* ── Outreach Email Modal ───────────────────────────── */}
       <AnimatePresence>
-        {selectedDashboardCandidate && (
-          <>
-            {/* Backdrop Overlay */}
+        {isEmailModalOpen && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(17, 24, 39, 0.4)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 100,
+              padding: 20,
+            }}
+          >
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.3 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedDashboardCandidate(null)}
-              style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: '#0F172A',
-                zIndex: 1000,
-              }}
-            />
-
-            {/* Sliding Drawer Card */}
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-              style={{
-                position: 'fixed',
-                top: 0,
-                right: 0,
-                width: 620,
-                height: '100vh',
-                background: '#FFFFFF',
-                boxShadow: '-10px 0 40px rgba(15, 23, 42, 0.15)',
-                zIndex: 1001,
-                display: 'flex',
-                flexDirection: 'column',
-                overflow: 'hidden',
-                borderLeft: '1px solid #E2E8F0',
-              }}
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="card"
+              style={{ width: "100%", maxWidth: 520, padding: 24, display: "flex", flexDirection: "column", gap: 16 }}
             >
-              {/* Drawer Title Header */}
-              <div style={{
-                padding: '16px 20px',
-                borderBottom: '1px solid #E2E8F0',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: '#F8FAFC',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Brain size={18} style={{ color: '#0F172A' }} />
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>Candidate Profile Review</span>
-                </div>
-                <button
-                  onClick={() => setSelectedDashboardCandidate(null)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#64748B',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 6,
-                    borderRadius: '50%',
-                    width: 28,
-                    height: 28,
-                    transition: 'all 0.1s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#E2E8F0'; e.currentTarget.style.color = '#0F172A'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#64748B'; }}
-                >
-                  <X size={18} />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>AI Outreach Template</h3>
+                <button className="btn btn-ghost btn-sm" onClick={() => setIsEmailModalOpen(false)} style={{ padding: 4 }}>
+                  <X size={16} />
                 </button>
               </div>
 
-              {/* Drawer Content Body container */}
-              <div className="scroll-y" style={{ flex: 1, overflowY: 'auto' }}>
-                <ProfilePanel
-                  candidate={selectedDashboardCandidate}
-                  onFavoriteToggle={handleToggleFavorite}
-                  onCandidateUpdate={handleCandidateUpdate}
-                  query={report?.query || ""}
-                  filters={{}}
+              <div className="input-group">
+                <label className="input-label">To</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={emailDraft.to}
+                  onChange={(e) => setEmailDraft({ ...emailDraft, to: e.target.value })}
                 />
               </div>
+
+              <div className="input-group">
+                <label className="input-label">Subject</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={emailDraft.subject}
+                  onChange={(e) => setEmailDraft({ ...emailDraft, subject: e.target.value })}
+                />
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Message Body</label>
+                <textarea
+                  rows={6}
+                  className="input"
+                  value={emailDraft.body}
+                  onChange={(e) => setEmailDraft({ ...emailDraft, body: e.target.value })}
+                />
+              </div>
+
+              <div style={{ display: "flex", justifyBetween: true, marginTop: 12 }}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    navigator.clipboard.writeText(emailDraft.body);
+                    toast.success("Outreach template copied!");
+                  }}
+                  style={{ display: "flex", gap: 5 }}
+                >
+                  <Clipboard size={14} />
+                  Copy outreach
+                </button>
+                <button className="btn btn-primary" onClick={() => setIsEmailModalOpen(false)}>
+                  Done
+                </button>
+              </div>
             </motion.div>
-          </>
+          </div>
         )}
       </AnimatePresence>
-
     </div>
   );
 }
+
+function ShareIcon(props) { return <ExternalLink {...props} />; }

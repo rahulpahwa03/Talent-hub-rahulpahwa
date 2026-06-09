@@ -42,11 +42,11 @@ function App() {
         {/* Recruiter Portal */}
         <Route path="/recruiter" element={<RecruiterLayout />}>
           <Route index element={<Navigate to="/recruiter/dashboard" replace />} />
-          <Route path="dashboard"  element={<Dashboard />} />
+          <Route path="dashboard"  element={<Dashboard activeTab="dashboard" />} />
+          <Route path="candidates" element={<Dashboard activeTab="candidates" />} />
+          <Route path="analytics"  element={<Dashboard activeTab="analytics" />} />
           <Route path="candidates/:id" element={<CandidateProfile />} />
-          <Route path="analytics"  element={<Analytics />} />
         </Route>
-        <Route path="/recruiter/candidates" element={<CandidateDatabase />} />
 
         {/* Candidate Portal */}
         <Route path="/candidate/upload"  element={<ResumeUpload />} />
