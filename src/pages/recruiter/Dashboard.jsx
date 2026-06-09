@@ -314,18 +314,26 @@ export default function RecruiterDashboard({ activeTab }) {
     async function fetchDb() {
       try {
         setLoading(true);
+        if (!supabase) {
+          console.warn("Supabase is offline/unconfigured. Loading mock pool.");
+          setCandidates(HIGH_FIDELITY_POOL);
+          return;
+        }
         const { data, error } = await supabase.from('candidates').select('*');
-        if (error) throw error;
-        // Merge Supabase entries with high-fidelity pre-defined candidate list
-        const merged = [...(data || [])];
+        const dbData = data || [];
+        const merged = [...dbData];
         HIGH_FIDELITY_POOL.forEach(item => {
           if (!merged.some(c => c.Email === item.Email)) {
             merged.push(item);
           }
         });
         setCandidates(merged);
+        if (error) {
+          console.warn("DB fetch partial error (using mock fallback):", error);
+        }
       } catch (err) {
         console.error("DB error:", err);
+        setCandidates(HIGH_FIDELITY_POOL);
       } finally {
         setLoading(false);
       }
@@ -531,6 +539,35 @@ export default function RecruiterDashboard({ activeTab }) {
     setAddingCandidate(true);
     try {
       let resumeUrl = "";
+      if (!supabase) {
+        // Mock success if offline/unconfigured
+        const mockNew = {
+          id: `pool-new-${Date.now()}`,
+          "Candidate Name": newCandidateForm.name,
+          Email: newCandidateForm.email,
+          "Contact No": newCandidateForm.phone,
+          LinkedIn: newCandidateForm.linkedin,
+          "Current Location": newCandidateForm.location,
+          VISA: newCandidateForm.visa || "US Citizen",
+          Title: newCandidateForm.title || "Consultant",
+          Skills: newCandidateForm.skills,
+          experience: newCandidateForm.experience || 1,
+          summary: newCandidateForm.summary || "Mock candidate details",
+          resume_url: "https://talent-hub-rahulpahwa.vercel.app/demo_resume.pdf",
+          resume_file_name: newCandidateFile?.name || "demo_resume.pdf",
+          created_at: new Date().toISOString(),
+          favorite: false,
+        };
+        setCandidates(prev => [mockNew, ...prev]);
+        toast.success("Candidate added successfully (Demo Mode)!");
+        setIsAddCandidateOpen(false);
+        setNewCandidateForm({
+          name: "", email: "", phone: "", linkedin: "", location: "",
+          visa: "", title: "", currentEmployer: "", experience: "", skills: "", summary: "",
+        });
+        setNewCandidateFile(null);
+        return;
+      }
       if (newCandidateFile) {
         const fileName = `${Date.now()}_${newCandidateFile.name}`;
         const { error: uploadErr } = await supabase.storage
@@ -602,6 +639,33 @@ export default function RecruiterDashboard({ activeTab }) {
       let resumeUrl = "";
       let resumeFile = "";
       
+      if (!supabase) {
+        // Local state update if offline/unconfigured
+        setCandidates(prev => prev.map(c => {
+          if (c.id === editingCandidateForm.id) {
+            return {
+              ...c,
+              "Candidate Name": editingCandidateForm.name,
+              Email: editingCandidateForm.email,
+              "Contact No": editingCandidateForm.phone,
+              LinkedIn: editingCandidateForm.linkedin,
+              "Current Location": editingCandidateForm.location,
+              VISA: editingCandidateForm.visa,
+              Title: editingCandidateForm.title,
+              Skills: editingCandidateForm.skills,
+              experience: editingCandidateForm.experience,
+              summary: editingCandidateForm.summary,
+              resume_url: resumeUrl || c.resume_url,
+              resume_file_name: resumeFile || c.resume_file_name,
+            };
+          }
+          return c;
+        }));
+        toast.success("Candidate profile updated successfully (Demo Mode)!");
+        setIsEditCandidateOpen(false);
+        setEditingCandidateFile(null);
+        return;
+      }
       if (editingCandidateFile) {
         const fileName = `${Date.now()}_${editingCandidateFile.name}`;
         const { error: uploadErr } = await supabase.storage
@@ -712,11 +776,13 @@ export default function RecruiterDashboard({ activeTab }) {
   const handleToggleFavorite = async (cand) => {
     const nextFav = !cand.favorite;
     try {
-      const { error } = await supabase
-        .from('candidates')
-        .update({ favorite: nextFav })
-        .eq('id', cand.id);
-      if (error) throw error;
+      if (supabase) {
+        const { error } = await supabase
+          .from('candidates')
+          .update({ favorite: nextFav })
+          .eq('id', cand.id);
+        if (error) throw error;
+      }
 
       setCandidates(prev => prev.map(c => c.id === cand.id ? { ...c, favorite: nextFav } : c));
       toast.success(nextFav ? "Added to favorites" : "Removed from favorites");
@@ -728,11 +794,13 @@ export default function RecruiterDashboard({ activeTab }) {
   // Save recruiter note
   const handleNoteSave = async (cand, text) => {
     try {
-      const { error } = await supabase
-        .from('candidates')
-        .update({ notes: text })
-        .eq('id', cand.id);
-      if (error) throw error;
+      if (supabase) {
+        const { error } = await supabase
+          .from('candidates')
+          .update({ notes: text })
+          .eq('id', cand.id);
+        if (error) throw error;
+      }
 
       setCandidates(prev => prev.map(c => c.id === cand.id ? { ...c, notes: text } : c));
       toast.success("Note saved");
@@ -1088,7 +1156,7 @@ export default function RecruiterDashboard({ activeTab }) {
                             const rate = getPredictedRate(cand);
                             
                             const cardResumeUrl = (cand.resume_url || cand['Resume URL'] || cand['Resume'] || '').trim() || 
-                                                  (cand.resume_file_name ? supabase.storage.from("resumes").getPublicUrl(`uploads/${cand.resume_file_name}`).data.publicUrl : "");
+                                                  ((cand.resume_file_name && supabase) ? supabase.storage.from("resumes").getPublicUrl(`uploads/${cand.resume_file_name}`).data.publicUrl : "");
                             const hasResume = !!(cardResumeUrl || (cand.resume_text && cand.resume_text.trim().length > 10));
 
                             return (
@@ -1298,7 +1366,7 @@ export default function RecruiterDashboard({ activeTab }) {
 
                             // Unified Resume lookup
                             const cardResumeUrl = (cand.resume_url || cand['Resume URL'] || cand['Resume'] || '').trim() || 
-                                                  (cand.resume_file_name ? supabase.storage.from("resumes").getPublicUrl(`uploads/${cand.resume_file_name}`).data.publicUrl : "");
+                                                  ((cand.resume_file_name && supabase) ? supabase.storage.from("resumes").getPublicUrl(`uploads/${cand.resume_file_name}`).data.publicUrl : "");
                             const hasResume = !!(cardResumeUrl || (cand.resume_text && cand.resume_text.trim().length > 10));
 
                             return (
@@ -1321,7 +1389,7 @@ export default function RecruiterDashboard({ activeTab }) {
                                 {/* Top Collapsed Row (CSS Grid to prevent overlapping and layout wrapping) */}
                                 <div style={{ 
                                   display: "grid", 
-                                  gridTemplateColumns: "280px 180px 1fr 180px", 
+                                  gridTemplateColumns: "1.4fr 0.9fr 1.2fr 0.9fr", 
                                   alignItems: "center", 
                                   padding: "16px 24px", 
                                   gap: 16,
