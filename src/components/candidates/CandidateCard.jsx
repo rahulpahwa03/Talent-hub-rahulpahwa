@@ -28,20 +28,23 @@ function getInitials(name = "") {
 
 /* ─── Match Score / Profile Strength Calculator ─────────── */
 export function calculateMatchScore(candidate, query = "", filters = {}) {
+  if (!candidate) {
+    return { score: 50, isProfileStrength: true, details: [], reasons: [] };
+  }
   const hasSkills = candidate["Skills"] ? true : false;
   const hasResume = !!(
-    candidate["resume_url"]?.trim() ||
-    candidate["Resume URL"]?.trim() ||
-    candidate["Resume"]?.trim()
+    (candidate["resume_url"] || "").trim() ||
+    (candidate["Resume URL"] || "").trim() ||
+    (candidate["Resume"] || "").trim()
   );
-  const hasLinkedIn = !!(candidate["LinkedIn"]?.trim() || candidate["linkedin"]?.trim());
-  const hasEmail = !!candidate["Email"]?.trim();
-  const hasPhone = !!candidate["Contact No"]?.trim();
-  const hasLocation = !!candidate["Current Location"]?.trim();
-  const hasVisa = !!candidate["VISA"]?.trim();
+  const hasLinkedIn = !!((candidate["LinkedIn"] || "").trim() || (candidate["linkedin"] || "").trim());
+  const hasEmail = !!(candidate["Email"] || "").trim();
+  const hasPhone = !!(candidate["Contact No"] || "").trim();
+  const hasLocation = !!(candidate["Current Location"] || "").trim();
+  const hasVisa = !!(candidate["VISA"] || "").trim();
 
   // Check if we have active search queries or filters
-  const hasActiveSkillsFilter = filters.skills && filters.skills.length > 0;
+  const hasActiveSkillsFilter = filters && filters.skills && filters.skills.length > 0;
   const hasActiveVisaFilter = !!filters.visa;
   const hasActiveLocationFilter = !!filters.location;
 
