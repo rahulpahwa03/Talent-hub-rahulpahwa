@@ -2550,15 +2550,47 @@ export default function CandidateDatabase() {
       // Limit response to 1000 matching candidates (Supabase cap)
       query = query.limit(1000);
 
-      const { data, error, count } = await query;
+      const { data, error } = await query;
+
+      // Get the exact count of all matching candidates in the database via a fast HEAD query
+      let countQuery = supabase
+        .from('candidates')
+        .select('*', { count: 'exact', head: true });
+
+      if (search.trim()) {
+        const term = `%${search.trim()}%`;
+        countQuery = countQuery.or(`"Candidate Name".ilike.${term},Title.ilike.${term},"Current Location".ilike.${term},Skills.ilike.${term}`);
+      }
+      if (statusFilter !== 'All') countQuery = countQuery.eq('status', statusFilter);
+      if (visaFilter !== 'All') countQuery = countQuery.eq('VISA', visaFilter);
+      if (workPref !== 'All') countQuery = countQuery.eq('work_pref', workPref);
+      if (expFilter > 0) countQuery = countQuery.gte('experience', expFilter);
+      if (resumeFilter !== 'All') {
+        if (resumeFilter === 'With') countQuery = countQuery.not('resume_url', 'is', null).neq('resume_url', '');
+        else countQuery = countQuery.or('resume_url.is.null,resume_url.eq.');
+      }
+      if (linkedinFilter !== 'All') {
+        if (linkedinFilter === 'With') countQuery = countQuery.not('LinkedIn', 'is', null).neq('LinkedIn', '');
+        else countQuery = countQuery.or('LinkedIn.is.null,LinkedIn.eq.');
+      }
+      if (emailFilter !== 'All') {
+        if (emailFilter === 'With') countQuery = countQuery.not('Email', 'is', null).neq('Email', '');
+        else countQuery = countQuery.or('Email.is.null,Email.eq.');
+      }
+      if (phoneFilter !== 'All') {
+        if (phoneFilter === 'With') countQuery = countQuery.not('Contact No', 'is', null).neq('Contact No', '');
+        else countQuery = countQuery.or('Contact No.is.null,Contact No.eq.');
+      }
+
+      const { count: exactCount } = await countQuery;
 
       if (error) {
         console.error('Error fetching candidates from Supabase:', error);
         return;
       }
 
-      if (count !== null) {
-        setTotalCandidatesCount(count);
+      if (exactCount !== null) {
+        setTotalCandidatesCount(exactCount);
       }
 
       if (data) {
