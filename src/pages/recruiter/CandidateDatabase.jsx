@@ -891,7 +891,7 @@ function BulkParseModal({ isOpen, onClose, onSave, showToast }) {
         name: f.result.name || f.name.replace(/\.[^/.]+$/, ""),
         role: f.result.title || "Software Engineer",
         location: f.result.location || "Remote",
-        visa: f.result.visa || "USC",
+        visa: f.result.visa || "",
         experience: parseFloat(f.result.experience) || 5,
         email: f.result.email || "",
         phone: f.result.phone || "",
