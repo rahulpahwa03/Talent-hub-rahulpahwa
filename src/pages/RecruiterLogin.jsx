@@ -387,24 +387,6 @@ export default function RecruiterLogin() {
             </motion.button>
           </div>
 
-          {/* Bottom link */}
-          <p
-            style={{
-              textAlign: 'center',
-              marginTop: 20,
-              fontSize: 13.5,
-              color: 'var(--text-secondary)',
-            }}
-          >
-            Are you a candidate?{' '}
-            <a
-              href="/login/candidate"
-              style={{ color: 'var(--text-primary)', fontWeight: 500, textDecoration: 'none' }}
-              onClick={(e) => { e.preventDefault(); navigate('/login/candidate'); }}
-            >
-              Submit your profile →
-            </a>
-          </p>
         </motion.div>
       </div>
     </div>

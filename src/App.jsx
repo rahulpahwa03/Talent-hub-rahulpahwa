@@ -33,7 +33,7 @@ function App() {
       />
       <Routes>
         {/* Entry */}
-        <Route path="/" element={<PortalSelection />} />
+        <Route path="/" element={<Navigate to="/login/recruiter" replace />} />
 
         {/* Auth */}
         <Route path="/login/recruiter" element={<RecruiterLogin />} />
