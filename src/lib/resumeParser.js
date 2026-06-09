@@ -60,8 +60,9 @@ async function extractPdf(file) {
       if (!item.str) continue;
       // Round Y to nearest 4px to group items on same visual line
       const yKey = Math.round((item.transform?.[5] ?? 0) / 4) * 4;
+      const xVal = item.transform?.[4] ?? 0;
       if (!lineMap[yKey]) lineMap[yKey] = [];
-      lineMap[yKey].push(item.str);
+      lineMap[yKey].push({ str: item.str, x: xVal });
     }
 
     // Sort lines top→bottom (PDF Y increases upward, so sort descending)
@@ -70,7 +71,13 @@ async function extractPdf(file) {
       .sort((a, b) => b - a);
 
     for (const y of sortedYs) {
-      const line = lineMap[y].join(' ').replace(/\s+/g, ' ').trim();
+      // Sort items on the same visual line left-to-right (X-coordinate ascending)
+      const line = lineMap[y]
+        .sort((a, b) => a.x - b.x)
+        .map(item => item.str)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       if (line) output.push(line);
     }
   }
@@ -428,7 +435,15 @@ function extractNameFromFileName(fileName) {
 }
 
 function extractName(lines, email, title, fileName) {
-  // Strategy 1: first 1-4 word line that isn't a section header, URL, email, or phone
+  // Strategy 1: check if filename is a clean name first (e.g. "John Doe")
+  if (fileName) {
+    const nameFromFileName = extractNameFromFileName(fileName);
+    if (nameFromFileName && nameFromFileName.split(' ').length >= 2) {
+      return nameFromFileName;
+    }
+  }
+
+  // Strategy 2: first 1-4 word line that isn't a section header, URL, email, or phone
   const SKIP = /resume|curriculum|vitae|\bcv\b|objective|summary|profile|education|experience|skills|contact|address|certif|reference|project|award|language|interest|publication/i;
   const SKIP_CHARS = /@|http|www\.|\.com|\.io|\.pdf|linkedin|github/i;
 
@@ -456,7 +471,7 @@ function extractName(lines, email, title, fileName) {
     return named;
   }
 
-  // Strategy 2: derive from email (john.doe@... → John Doe)
+  // Strategy 3: derive from email (john.doe@... → John Doe)
   if (email) {
     const local = email.split('@')[0];
     const parts = local
@@ -467,7 +482,7 @@ function extractName(lines, email, title, fileName) {
     }
   }
 
-  // Strategy 3: derive from filename
+  // Strategy 4: derive from filename fallback (any filename extraction)
   if (fileName) {
     const nameFromFileName = extractNameFromFileName(fileName);
     if (nameFromFileName) return nameFromFileName;
