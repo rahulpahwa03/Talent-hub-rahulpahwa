@@ -1382,13 +1382,13 @@ export default function RecruiterDashboard({ activeTab }) {
                       </div>
                     ) : (
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                        <div style={{ flex: 1, overflowY: "auto", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20, padding: "20px 24px" }}>
+                        <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, padding: "16px 24px" }}>
                           {loading ? (
-                            <div style={{ display: "flex", justifyContent: "center", padding: 60, gridColumn: "1 / -1" }}>
+                            <div style={{ display: "flex", justifyCenter: true, padding: 60 }}>
                               <Loader2 size={32} style={{ animation: "spin 1s linear infinite" }} />
                             </div>
                           ) : processedCandidates.length === 0 ? (
-                            <div className="empty-state" style={{ gridColumn: "1 / -1" }}>
+                            <div className="empty-state">
                               <Info size={32} />
                               <p>No candidates match your filters.</p>
                             </div>
@@ -1408,109 +1408,96 @@ export default function RecruiterDashboard({ activeTab }) {
                                   key={cand.id}
                                   className="card card-hover"
                                   style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    padding: 20,
-                                    borderTop: score > 90 ? "4px solid #6C5CE7" : "1px solid var(--border)",
+                                    display: "grid",
+                                    gridTemplateColumns: "1.4fr 1.2fr 1.2fr 0.9fr",
+                                    alignItems: "center",
+                                    padding: "16px 24px",
+                                    gap: 16,
+                                    minHeight: 88,
+                                    background: "var(--bg)",
+                                    borderLeft: score > 90 ? "4px solid #6C5CE7" : "1px solid var(--border)",
                                     boxShadow: "var(--shadow-sm)",
                                     borderRadius: "var(--radius-lg)",
-                                    background: "var(--bg)",
-                                    position: "relative",
-                                    justifyContent: "space-between",
-                                    height: "fit-content",
-                                    minHeight: 320,
                                   }}
                                 >
-                                  <div>
-                                    {/* Header Info */}
-                                    <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
-                                      <div
-                                        className="avatar avatar-md"
-                                        style={{
-                                          background: colorInfo.bg,
-                                          color: colorInfo.text,
-                                          border: `1px solid ${colorInfo.border}`,
-                                          width: 44, height: 44, fontSize: 14,
-                                          fontWeight: 700,
-                                          borderRadius: "12px",
-                                          flexShrink: 0,
-                                        }}
-                                      >
-                                        {cand['Candidate Name'] ? cand['Candidate Name'].split(' ').slice(0, 2).map(n => n[0]).join('') : "?"}
-                                      </div>
-                                      <div style={{ minWidth: 0, flex: 1 }}>
-                                        <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                          {cand['Candidate Name']}
-                                        </h4>
-                                        <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                          {cand['Title'] || "Technical Consultant"}
-                                        </p>
-                                      </div>
-                                      <div style={{
-                                        background: "#F5F3FF",
-                                        border: "1px solid #D8B4FE",
-                                        color: "#7C3AED",
-                                        padding: "4px 8px",
-                                        borderRadius: 99,
-                                        fontSize: 10.5,
+                                  {/* Left Column: Avatar + Name + Title */}
+                                  <div style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
+                                    <div
+                                      className="avatar avatar-md"
+                                      style={{
+                                        background: colorInfo.bg,
+                                        color: colorInfo.text,
+                                        border: `1px solid ${colorInfo.border}`,
+                                        width: 42, height: 42, fontSize: 14,
                                         fontWeight: 700,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 3,
-                                      }}>
-                                        <Zap size={10} fill="#7C3AED" />
-                                        {score}%
-                                      </div>
+                                        borderRadius: "10px",
+                                        flexShrink: 0,
+                                      }}
+                                    >
+                                      {cand['Candidate Name'] ? cand['Candidate Name'].split(' ').slice(0, 2).map(n => n[0]).join('') : "?"}
                                     </div>
-
-                                    {/* Badges Info */}
-                                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-                                      {cand['VISA'] && <span className="badge badge-blue" style={{ fontSize: 10, padding: "2px 8px" }}>{cand['VISA']}</span>}
-                                      {cand.experience && <span className="badge badge-gray" style={{ fontSize: 10, padding: "2px 8px" }}>💼 {cand.experience} yrs</span>}
-                                      <span className="badge badge-amber" style={{ fontSize: 10, padding: "2px 8px" }}>💰 {rate.split(' / ')[0]}</span>
-                                      <span className="badge badge-green" style={{ fontSize: 10, padding: "2px 8px" }}>🔥 Trending</span>
-                                    </div>
-
-                                    {/* Bio Summary */}
-                                    <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, margin: "0 0 14px", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                                      {cand.summary || "No summary details available on profile."}
-                                    </p>
-
-                                    {/* Skills Roster */}
-                                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 16 }}>
-                                      {(cand['Skills'] || "").split(/[|,]/).slice(0, 4).map((s, idx) => (
-                                        <span key={idx} className="tag" style={{ fontSize: 10, padding: "2px 8px", background: "var(--bg-muted)", border: "1px solid var(--border-soft)" }}>{s.trim()}</span>
-                                      ))}
-                                      {(cand['Skills'] || "").split(/[|,]/).length > 4 && (
-                                        <span style={{ fontSize: 10, padding: "2px 4px", color: "var(--text-muted)", fontWeight: 500 }}>
-                                          +{cand['Skills'].split(/[|,]/).length - 4} more
-                                        </span>
-                                      )}
+                                    <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                                      <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                        {cand['Candidate Name']}
+                                      </h4>
+                                      <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                        {cand['Title'] || "Technical Consultant"}
+                                      </p>
                                     </div>
                                   </div>
 
-                                  {/* Card Action Footer */}
-                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid var(--border-soft)", paddingTop: 14, gap: 10 }}>
-                                    <div style={{ display: "flex", gap: 6 }}>
+                                  {/* Middle Column: Visa, Exp & Rate */}
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                                      {cand['VISA'] && <span className="badge badge-blue" style={{ fontSize: 9.5, padding: "2px 6px" }}>{cand['VISA']}</span>}
+                                      {cand.experience && <span className="badge badge-gray" style={{ fontSize: 9.5, padding: "2px 6px" }}>{cand.experience} yrs</span>}
+                                    </div>
+                                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                                      <span className="badge badge-amber" style={{ display: "flex", gap: 2, alignItems: "center", fontSize: 9.5, padding: "2px 6px" }}>
+                                        <DollarSign size={9} />
+                                        {rate.split(' / ')[0]}
+                                      </span>
+                                      <span className="badge badge-green" style={{ display: "flex", gap: 2, alignItems: "center", fontWeight: 700, fontSize: 9.5, padding: "2px 6px" }}>
+                                        <Zap size={9} />
+                                        {score}% Match
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Skills Column */}
+                                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", minWidth: 0 }}>
+                                    {(cand['Skills'] || "").split(/[|,]/).slice(0, 3).map((s, idx) => (
+                                      <span key={idx} className="tag" style={{ fontSize: 10, padding: "2px 6px", background: "var(--bg-muted)", border: "1px solid var(--border-soft)", whiteSpace: "nowrap" }}>{s.trim()}</span>
+                                    ))}
+                                    {(cand['Skills'] || "").split(/[|,]/).length > 3 && (
+                                      <span className="tag" style={{ fontSize: 10, padding: "2px 6px", color: "var(--text-muted)", background: "transparent", border: "none" }}>
+                                        +{cand['Skills'].split(/[|,]/).length - 3}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Right Column: Actions (Favorites, Profile details page, CV modal viewer) */}
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                                    <div style={{ display: "flex", gap: 4 }}>
                                       {cand['LinkedIn'] && (
                                         <a
                                           href={cand['LinkedIn'].startsWith("http") ? cand['LinkedIn'] : `https://${cand['LinkedIn']}`}
                                           target="_blank"
                                           rel="noreferrer"
                                           className="btn btn-secondary btn-sm"
-                                          style={{ padding: 7, borderRadius: "8px" }}
+                                          style={{ padding: 6, borderRadius: "6px" }}
                                           title="LinkedIn Profile"
                                         >
-                                          <LinkIcon size={13} />
+                                          <LinkIcon size={12} />
                                         </a>
                                       )}
                                       <button
                                         className="btn btn-secondary btn-sm"
-                                        style={{ padding: 7, borderRadius: "8px" }}
+                                        style={{ padding: 6, borderRadius: "6px" }}
                                         title="Toggle Favorite"
                                         onClick={() => handleToggleFavorite(cand)}
                                       >
-                                        <Heart size={13} fill={cand.favorite ? "#E11D48" : "none"} color={cand.favorite ? "#E11D48" : "currentColor"} />
+                                        <Heart size={12} fill={cand.favorite ? "#E11D48" : "none"} color={cand.favorite ? "#E11D48" : "currentColor"} />
                                       </button>
                                       <button
                                         className="btn btn-secondary btn-sm"
@@ -1522,7 +1509,7 @@ export default function RecruiterDashboard({ activeTab }) {
                                           });
                                           setIsEmailModalOpen(true);
                                         }}
-                                        style={{ fontSize: 11, padding: "6px 10px", borderRadius: "8px" }}
+                                        style={{ fontSize: 11, padding: "6px 10px", borderRadius: "6px" }}
                                       >
                                         ✉️ Message
                                       </button>
@@ -1532,13 +1519,13 @@ export default function RecruiterDashboard({ activeTab }) {
                                       <button
                                         className="btn btn-primary btn-sm"
                                         onClick={() => setResumePreviewUrl(cardResumeUrl)}
-                                        style={{ fontSize: 11, padding: "6px 12px", display: "flex", gap: 4, alignItems: "center", borderRadius: "8px", fontWeight: 600 }}
+                                        style={{ fontSize: 11, padding: "6px 12px", display: "flex", gap: 4, alignItems: "center", borderRadius: "6px", fontWeight: 600 }}
                                       >
                                         <FileText size={12} />
                                         CV Preview
                                       </button>
                                     ) : (
-                                      <span style={{ fontSize: 10.5, color: "var(--text-muted)", padding: "4px 8px", border: "1px dashed var(--border)", borderRadius: "8px", background: "var(--bg-soft)" }}>
+                                      <span style={{ fontSize: 11, color: "var(--text-muted)", padding: "5px 10px", border: "1px dashed var(--border)", borderRadius: "6px", background: "var(--bg-soft)" }}>
                                         No CV
                                       </span>
                                     )}
