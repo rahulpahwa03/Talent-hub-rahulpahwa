@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, Check, ArrowRight } from 'lucide-react';
+import { Mail, Check, ArrowRight, ShieldAlert, KeyRound, ArrowLeft } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
 
 const features = [
   'AI-powered candidate matching and ranking',
@@ -29,14 +31,91 @@ const slideLeft = {
 
 export default function RecruiterLogin() {
   const navigate = useNavigate();
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [step, setStep] = useState('email'); // 'email' | 'otp'
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSignIn = (e) => {
+  const handleSendOtp = async (e) => {
     e.preventDefault();
-    navigate('/recruiter/dashboard');
+    if (!email) {
+      toast.error('Please enter your email address');
+      return;
+    }
+    
+    const isAdmin = email.toLowerCase() === 'admin' || email.toLowerCase() === 'admin@ezhire.com';
+    if (isAdmin) {
+      setStep('otp');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (supabase) {
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            shouldCreateUser: false, // assuming recruiters are pre-registered
+          }
+        });
+        if (error) throw error;
+        toast.success('OTP sent to your email!');
+      } else {
+        // Simulated flow
+        console.log('Supabase not configured. Using demo mode OTP: 123456');
+        toast.success('Demo Mode: OTP sent! Use code 123456', { duration: 8000 });
+      }
+      setStep('otp');
+    } catch (err) {
+      toast.error(err.message || 'Failed to send OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (!otpCode) {
+      toast.error('Please enter the verification code');
+      return;
+    }
+
+    const isAdmin = email.toLowerCase() === 'admin' || email.toLowerCase() === 'admin@ezhire.com';
+    if (isAdmin) {
+      if (otpCode === 'admin') {
+        toast.success('Logged in as Admin!');
+        navigate('/recruiter/dashboard');
+      } else {
+        toast.error('Incorrect admin password');
+      }
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (supabase) {
+        const { error } = await supabase.auth.verifyOtp({
+          email,
+          token: otpCode,
+          type: 'email',
+        });
+        if (error) throw error;
+        toast.success('Successfully logged in!');
+        navigate('/recruiter/dashboard');
+      } else {
+        // Simulated flow
+        if (otpCode === '123456') {
+          toast.success('Success! Logging in (Demo Mode)...');
+          navigate('/recruiter/dashboard');
+        } else {
+          toast.error('Invalid OTP code. Please use 123456 for demo.');
+        }
+      }
+    } catch (err) {
+      toast.error(err.message || 'Verification failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGuest = () => {
@@ -256,110 +335,192 @@ export default function RecruiterLogin() {
         >
           {/* Card */}
           <div className="card" style={{ padding: '36px 36px 32px' }}>
-            {/* Heading */}
-            <div style={{ marginBottom: 28 }}>
-              <h2 style={{ marginBottom: 6 }}>Welcome back</h2>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
-                Sign in to EzHire Recruiter Portal
-              </p>
-            </div>
+            <AnimatePresence mode="wait">
+              {step === 'email' ? (
+                <motion.div
+                  key="email-step"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {/* Heading */}
+                  <div style={{ marginBottom: 28 }}>
+                    <h2 style={{ marginBottom: 6 }}>Welcome back</h2>
+                    <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                      Enter your email to receive a login verification code
+                    </p>
+                  </div>
 
-            <form onSubmit={handleSignIn} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              {/* Email */}
-              <div className="input-group">
-                <label className="input-label" htmlFor="email">
-                  Email address
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <Mail
-                    size={15}
-                    color="var(--text-muted)"
-                    style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-                  />
-                  <input
-                    id="email"
-                    type="email"
-                    className="input"
-                    placeholder="you@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    style={{ paddingLeft: 36 }}
-                    autoComplete="email"
-                  />
-                </div>
-              </div>
+                  <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                    {/* Email */}
+                    <div className="input-group">
+                      <label className="input-label" htmlFor="email">
+                        Email address
+                      </label>
+                      <div style={{ position: 'relative' }}>
+                        <Mail
+                          size={15}
+                          color="var(--text-muted)"
+                          style={{
+                            position: 'absolute',
+                            left: 12,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            pointerEvents: 'none',
+                          }}
+                        />
+                        <input
+                          id="email"
+                          type="email"
+                          className="input"
+                          placeholder="you@company.com"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          style={{ paddingLeft: 36 }}
+                          autoComplete="email"
+                          required
+                          disabled={loading}
+                        />
+                      </div>
+                    </div>
 
-              {/* Password */}
-              <div className="input-group">
-                <label className="input-label" htmlFor="password">
-                  Password
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <Lock
-                    size={15}
-                    color="var(--text-muted)"
-                    style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
-                  />
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    className="input"
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    style={{ paddingLeft: 36, paddingRight: 40 }}
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    style={{
-                      position: 'absolute',
-                      right: 11,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: 2,
-                      color: 'var(--text-muted)',
-                    }}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
-                </div>
-              </div>
+                    {/* Send OTP button */}
+                    <motion.button
+                      type="submit"
+                      className="btn btn-primary btn-lg btn-full"
+                      whileHover={{ scale: 1.015 }}
+                      whileTap={{ scale: 0.985 }}
+                      style={{ marginTop: 4 }}
+                      disabled={loading}
+                    >
+                      {loading ? 'Sending verification code...' : 'Send Verification Code'}
+                      <ArrowRight size={15} />
+                    </motion.button>
+                  </form>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="otp-step"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {/* Heading */}
+                  <div style={{ marginBottom: 28 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        cursor: 'pointer',
+                        color: 'var(--text-muted)',
+                        fontSize: 13,
+                        marginBottom: 12,
+                      }}
+                      onClick={() => setStep('email')}
+                    >
+                      <ArrowLeft size={14} />
+                      <span>Back to email</span>
+                    </div>
+                    <h2 style={{ marginBottom: 6 }}>
+                      {email.toLowerCase() === 'admin' || email.toLowerCase() === 'admin@ezhire.com'
+                        ? 'Enter admin password'
+                        : 'Enter verification code'}
+                    </h2>
+                    <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                      {email.toLowerCase() === 'admin' || email.toLowerCase() === 'admin@ezhire.com'
+                        ? 'Please provide your temporary admin password'
+                        : `We sent a 6-digit code to ${email}`}
+                    </p>
+                  </div>
 
-              {/* Remember me + Forgot */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                  />
-                  Remember me
-                </label>
-                <a href="#" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none' }}>
-                  Forgot password?
-                </a>
-              </div>
+                  <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                    {/* OTP Code / Admin Password */}
+                    <div className="input-group">
+                      <label className="input-label" htmlFor="otp">
+                        {email.toLowerCase() === 'admin' || email.toLowerCase() === 'admin@ezhire.com'
+                          ? 'Admin Password'
+                          : 'Verification Code'}
+                      </label>
+                      <div style={{ position: 'relative' }}>
+                        <KeyRound
+                          size={15}
+                          color="var(--text-muted)"
+                          style={{
+                            position: 'absolute',
+                            left: 12,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            pointerEvents: 'none',
+                          }}
+                        />
+                        <input
+                          id="otp"
+                          type={email.toLowerCase() === 'admin' || email.toLowerCase() === 'admin@ezhire.com' ? 'password' : 'text'}
+                          maxLength={email.toLowerCase() === 'admin' || email.toLowerCase() === 'admin@ezhire.com' ? undefined : 6}
+                          className="input"
+                          placeholder={
+                            email.toLowerCase() === 'admin' || email.toLowerCase() === 'admin@ezhire.com'
+                              ? 'Enter admin password'
+                              : 'Enter 6-digit code'
+                          }
+                          value={otpCode}
+                          onChange={(e) =>
+                            setOtpCode(
+                              email.toLowerCase() === 'admin' || email.toLowerCase() === 'admin@ezhire.com'
+                                ? e.target.value
+                                : e.target.value.replace(/\D/g, '')
+                            )
+                          }
+                          style={{
+                            paddingLeft: 36,
+                            letterSpacing: email.toLowerCase() === 'admin' || email.toLowerCase() === 'admin@ezhire.com' ? 'normal' : '0.1em',
+                          }}
+                          autoComplete="current-password"
+                          required
+                          disabled={loading}
+                        />
+                      </div>
+                    </div>
 
-              {/* Sign In button */}
-              <motion.button
-                type="submit"
-                className="btn btn-primary btn-lg btn-full"
-                whileHover={{ scale: 1.015 }}
-                whileTap={{ scale: 0.985 }}
-                style={{ marginTop: 4 }}
-              >
-                Sign in to EzHire
-                <ArrowRight size={15} />
-              </motion.button>
-            </form>
+                    {/* Verify OTP button */}
+                    <motion.button
+                      type="submit"
+                      className="btn btn-primary btn-lg btn-full"
+                      whileHover={{ scale: 1.015 }}
+                      whileTap={{ scale: 0.985 }}
+                      style={{ marginTop: 4 }}
+                      disabled={loading}
+                    >
+                      {loading ? 'Verifying...' : 'Verify & Log in'}
+                      <ArrowRight size={15} />
+                    </motion.button>
+
+                    {!(email.toLowerCase() === 'admin' || email.toLowerCase() === 'admin@ezhire.com') && (
+                      <div style={{ textAlign: 'center', marginTop: 8 }}>
+                        <button
+                          type="button"
+                          onClick={handleSendOtp}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--accent)',
+                            fontSize: 13,
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                          }}
+                          disabled={loading}
+                        >
+                          Resend code
+                        </button>
+                      </div>
+                    )}
+                  </form>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Divider */}
             <div
@@ -386,7 +547,6 @@ export default function RecruiterLogin() {
               Continue as Guest
             </motion.button>
           </div>
-
         </motion.div>
       </div>
     </div>
