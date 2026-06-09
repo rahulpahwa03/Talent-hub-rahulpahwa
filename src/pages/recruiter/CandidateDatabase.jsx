@@ -1803,6 +1803,8 @@ export default function CandidateDatabase() {
     };
   }, []);
 
+  const [candidatesList, setCandidatesList] = useState(CANDIDATES);
+
   // Crawler simulator state
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlerLogs, setCrawlerLogs] = useState([]);
