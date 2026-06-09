@@ -206,6 +206,15 @@ function getModernAvatar(name) {
 
 function getEmbeddableResumeUrl(url) {
   if (!url) return "";
+  const openMatch = url.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9\-_]+)/);
+  if (openMatch) {
+    return `https://drive.google.com/file/d/${openMatch[1]}/preview`;
+  }
+  const fileMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9\-_]+)/);
+  if (fileMatch) {
+    return `https://drive.google.com/file/d/${fileMatch[1]}/preview`;
+  }
+
   const lowercaseUrl = url.toLowerCase();
   if (
     lowercaseUrl.endsWith(".docx") ||
