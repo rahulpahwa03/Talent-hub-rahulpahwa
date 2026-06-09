@@ -45,6 +45,12 @@ function getInitials(name = "") {
 
 function getEmbeddableResumeUrl(url) {
   if (!url) return "";
+  
+  // Clean up any double slashes or extra parts if it contains demo_resume.pdf or tracemonkey
+  if (url.includes("demo_resume.pdf") || url.includes("tracemonkey-pldi-09")) {
+    return "/demo_resume.pdf";
+  }
+
   const openMatch = url.match(/drive\.google\.com\/open\?id=([a-zA-Z0-9\-_]+)/);
   if (openMatch) {
     return `https://drive.google.com/file/d/${openMatch[1]}/preview`;
