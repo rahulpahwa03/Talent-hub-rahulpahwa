@@ -439,7 +439,11 @@ function extractName(lines, email, title, fileName) {
   if (fileName) {
     const nameFromFileName = extractNameFromFileName(fileName);
     if (nameFromFileName && nameFromFileName.split(' ').length >= 2) {
-      return nameFromFileName;
+      // Guard: Ensure it doesn't contain common title keywords or role terms
+      const titleKeywords = /\b(software|engineer|developer|architect|analyst|manager|consultant|director|lead|senior|data|cloud|bi|qa|sdet|tech|java|python|javascript|aws|azure|snowflake|admin|recruiter|acquisition|recruit|talent|design|hiring|project|program)\b/i;
+      if (!titleKeywords.test(nameFromFileName)) {
+        return nameFromFileName;
+      }
     }
   }
 
