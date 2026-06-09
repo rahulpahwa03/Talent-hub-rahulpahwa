@@ -1860,7 +1860,8 @@ function CandidatesPanel({
   onScrape,
   onUploadResume: handleUploadResume,
   onUpdateCandidate,
-  loading = false
+  loading = false,
+  totalCandidatesCount = 0
 }) {
   const [selectedId, setSelectedId] = useState(null);
 
@@ -1993,7 +1994,7 @@ function CandidatesPanel({
       <div style={{ padding: '10px 20px', borderBottom: '1px solid #E8E6F0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 13, color: '#6B6B8A' }}>
           Showing <span style={{ fontWeight: 600, color: '#1A1A2E' }}>
-            {filtered.length > 0 ? `${(currentPage - 1) * itemsPerPage + 1} - ${Math.min(currentPage * itemsPerPage, filtered.length)} of ${filtered.length}` : '0'}
+            {filtered.length > 0 ? `${(currentPage - 1) * itemsPerPage + 1} - ${Math.min(currentPage * itemsPerPage, filtered.length)} of ${totalCandidatesCount || filtered.length}` : '0'}
           </span> candidates
           {activeFilters > 0 && <span style={{ color: '#6C5CE7', marginLeft: 4 }}>· filtered</span>}
         </span>
@@ -2104,6 +2105,7 @@ export default function CandidateDatabase() {
 
   const [candidatesList, setCandidatesList] = useState(CANDIDATES);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [totalCandidatesCount, setTotalCandidatesCount] = useState(0);
 
   const handleUploadResume = async (candidate, file) => {
     if (!file) return;
@@ -2496,7 +2498,7 @@ export default function CandidateDatabase() {
     try {
       let query = supabase
         .from('candidates')
-        .select('*')
+        .select('*', { count: 'exact' })
         .order('created_at', { ascending: false });
 
       // Apply server-side filters if we have filters set
@@ -2548,11 +2550,15 @@ export default function CandidateDatabase() {
       // Limit response to 1000 matching candidates (Supabase cap)
       query = query.limit(1000);
 
-      const { data, error } = await query;
+      const { data, error, count } = await query;
 
       if (error) {
         console.error('Error fetching candidates from Supabase:', error);
         return;
+      }
+
+      if (count !== null) {
+        setTotalCandidatesCount(count);
       }
 
       if (data) {
@@ -2693,6 +2699,7 @@ export default function CandidateDatabase() {
             onUploadResume={handleUploadResume}
             onUpdateCandidate={handleUpdateCandidateFields}
             loading={loadingCandidates}
+            totalCandidatesCount={totalCandidatesCount}
           />
         ) : (
           <DetailPage
