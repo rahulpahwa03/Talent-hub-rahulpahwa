@@ -2605,7 +2605,7 @@ export default function CandidateDatabase() {
             role: c["Title"] || c["role"] || "Software Engineer",
             status: c["status"] || "Available Now",
             location: c["Current Location"] || "Remote",
-            visa: c["VISA"] || "USC",
+            visa: c["VISA"] || "",
             experience: Number(c["experience"]) || 5,
             workPref: c["work_pref"] || c["workPref"] || "Remote",
             availableFrom: c["available_from"] || c["availableFrom"] || "Immediately",
