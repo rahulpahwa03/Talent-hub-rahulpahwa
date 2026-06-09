@@ -34,6 +34,11 @@ import {
   SlidersHorizontal,
   Download,
   Info,
+  Phone,
+  Link as LinkIcon,
+  File,
+  User,
+  Share2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
@@ -43,18 +48,6 @@ import {
 } from 'recharts';
 
 /* ─── Static Constants ────────────────────────────────────── */
-const MOCK_METRICS = [
-  { label: 'Total Candidates', value: '48,291', delta: '+2.4% this week', Icon: UsersIcon, iconBg: '#EFF6FF', iconColor: '#2563EB' },
-  { label: 'Active Recruiters', value: '12', delta: '3 online now', Icon: UserCheck, iconBg: '#F0FDF4', iconColor: '#16A34A' },
-  { label: 'New Profiles', value: '284', delta: '+18 today', Icon: UserPlusIcon, iconBg: '#FFFBEB', iconColor: '#D97706' },
-  { label: 'Resumes Parsed', value: '41,203', delta: 'AI powered', Icon: FileText, iconBg: '#F5F3FF', iconColor: '#7C3AED' },
-  { label: 'Favorites', value: '1,847', delta: '23 new this week', Icon: Heart, iconBg: '#FFF1F2', iconColor: '#E11D48' },
-  { label: 'Submissions', value: '3,294', delta: '+142 this month', Icon: Send, iconBg: '#F0FDF4', iconColor: '#16A34A' },
-];
-
-function UsersIcon(props) { return <UserCheck {...props} />; }
-function UserPlusIcon(props) { return <UserCheck {...props} />; }
-
 const ANALYTICS_PERIODS = ['7d', '30d', '90d', '1y'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -86,34 +79,6 @@ const RECRUITERS = [
   { name: 'David Lee',     added: 76,  searches: 43, notes: 22 },
   { name: 'Emma Wilson',   added: 64,  searches: 38, notes: 15 },
 ];
-
-const CLIENT_DATABASE = {
-  "snowflake": {
-    domain: "Cloud Data Warehousing & Cloud Data SaaS",
-    competitors: ["Databricks", "AWS (Amazon)", "Google Cloud (GCP)", "Cloudera", "Confluent"],
-    suggestedQuery: "Snowflake AND (dbt OR SQL) AND AWS",
-  },
-  "capital one": {
-    domain: "FinTech, Consumer Banking & Cloud Financial Platforms",
-    competitors: ["JPMorgan Chase", "Bank of America", "Citi", "Discover", "American Express"],
-    suggestedQuery: "Java AND AWS AND Spring Boot",
-  },
-  "apple": {
-    domain: "Consumer Electronics, Mobile OS & Edge AI Engineering",
-    competitors: ["Google (Alphabet)", "Microsoft", "Meta (Facebook)", "Amazon", "Netflix"],
-    suggestedQuery: "Swift OR iOS OR Objective-C",
-  },
-  "stripe": {
-    domain: "Merchant Payment Infrastructure & Developer APIs",
-    competitors: ["PayPal", "Adyen", "Block (Square)", "Braintree", "Klarna"],
-    suggestedQuery: "(Ruby OR Go OR Python) AND API",
-  },
-  "databricks": {
-    domain: "Unified Analytics, Delta Lake & Spark AI Platforms",
-    competitors: ["Snowflake", "Cloudera", "AWS (Amazon)", "Google Cloud", "HPE"],
-    suggestedQuery: "(Spark OR Scala OR Python) AND Databricks",
-  }
-};
 
 const SUGGESTED_CHIPS = [
   "Snowflake Engineers in Texas with H1B",
@@ -147,53 +112,19 @@ function getAvatarColor(name) {
   return AVATAR_COLORS[code % AVATAR_COLORS.length];
 }
 
-/* ─── NLP Sourcing Helpers ────────────────────────────────── */
-function analyzeJobDescription(text, clientName = "") {
-  const t = text.toLowerCase();
-  const matchedSkills = Object.keys(CLIENT_DATABASE).reduce((acc, key) => acc, []); // custom dynamic matching
-  
-  let domain = "Enterprise Systems & Cloud Software Sourcing";
-  let competitors = ["Google", "Microsoft", "AWS", "Databricks", "Snowflake"];
-  let query = "Developer OR Engineer";
-
-  const clientLower = clientName.toLowerCase().trim();
-  const matchedClientKey = Object.keys(CLIENT_DATABASE).find(key => clientLower.includes(key));
-
-  if (matchedClientKey) {
-    const data = CLIENT_DATABASE[matchedClientKey];
-    domain = data.domain;
-    competitors = data.competitors;
-    query = data.suggestedQuery;
+/* Helper to generate embeddable resume link */
+function getEmbeddableResumeUrl(url) {
+  if (!url) return "";
+  const lowercaseUrl = url.toLowerCase();
+  if (
+    lowercaseUrl.endsWith(".docx") ||
+    lowercaseUrl.endsWith(".doc") ||
+    lowercaseUrl.includes(".docx?") ||
+    lowercaseUrl.includes(".doc?")
+  ) {
+    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
   }
-
-  return { domain, competitors, query, skills: ["Java", "AWS", "Python"] };
-}
-
-function parseNaturalQuery(text) {
-  const query = text.toLowerCase();
-  let visa = "";
-  let location = "";
-  let skills = [];
-
-  // Match visa
-  if (query.includes("h1b") || query.includes("h-1b")) visa = "H1B";
-  else if (query.includes("citizen") || query.includes("usc")) visa = "US Citizen";
-  else if (query.includes("green card") || query.includes("gc")) visa = "Green Card";
-  else if (query.includes("opt")) visa = "OPT/CPT";
-
-  // Match location
-  if (query.includes("texas") || query.includes("tx") || query.includes("dallas") || query.includes("austin")) location = "Texas";
-  else if (query.includes("california") || query.includes("ca") || query.includes("sf")) location = "California";
-  else if (query.includes("new york") || query.includes("ny")) location = "New York";
-
-  // Match skills
-  if (query.includes("snowflake")) skills.push("Snowflake");
-  if (query.includes("python")) skills.push("Python");
-  if (query.includes("aws")) skills.push("AWS");
-  if (query.includes("java")) skills.push("Java");
-  if (query.includes("spring boot")) skills.push("Spring Boot");
-
-  return { visa, location, skills, keywords: text };
+  return url;
 }
 
 /* ════════════════════════════════════════════════════════
@@ -223,36 +154,35 @@ export default function RecruiterDashboard({ activeTab }) {
   const [skillInput, setSkillInput] = useState("");
   const [selectedCandidate, setSelectedCandidate] = useState(null);
 
+  // Modals state
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailDraft, setEmailDraft] = useState({ to: "", subject: "", body: "" });
+  const [isAddCandidateOpen, setIsAddCandidateOpen] = useState(false);
+  const [isAskCandidateOpen, setIsAskCandidateOpen] = useState(false);
+  const [resumePreviewUrl, setResumePreviewUrl] = useState(null);
+
+  // New Candidate Form State
+  const [newCandidateForm, setNewCandidateForm] = useState({
+    name: "", email: "", phone: "", linkedin: "", location: "",
+    visa: "", title: "", currentEmployer: "", experience: "", skills: "", summary: "",
+  });
+  const [newCandidateFile, setNewCandidateFile] = useState(null);
+  const [addingCandidate, setAddingCandidate] = useState(false);
+
   // Analytics Tab period
   const [analyticsPeriod, setAnalyticsPeriod] = useState("30d");
-
-  // AI Sourcing Composer States (tab dashboard)
-  const [composerTab, setComposerTab] = useState("jd"); // "jd" | "client" | "keywords"
-  const [composerJd, setComposerJd] = useState("");
-  const [composerClient, setComposerClient] = useState("");
-  const [composerKeywords, setComposerKeywords] = useState([]);
-  const [composerKeywordInput, setComposerKeywordInput] = useState("");
-  const [isSourcing, setIsSourcing] = useState(false);
-  const [sourcingStep, setSourcingStep] = useState(0);
-  const [sourcingReport, setSourcingReport] = useState(null);
 
   // Ezra AI Chat state
   const [isEzraOpen, setIsEzraOpen] = useState(false);
   const [ezraMessages, setEzraMessages] = useState([
     {
       sender: "ezra",
-      text: "Hello! I am Ezra, your AI recruiting partner. Ask me to query candidates, filter visas, or generate outreach templates directly.",
+      text: "Hello, I am Ezra, your AI recruiting assistant. You can search the candidate database using natural language or filter candidates easily.",
       time: "10:00 AM",
     },
   ]);
   const [ezraInput, setEzraInput] = useState("");
   const [isEzraTyping, setIsEzraTyping] = useState(false);
-
-  // Notes and Email Draft Modal
-  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
-  const [emailDraft, setEmailDraft] = useState({ to: "", subject: "", body: "" });
-  const [savingNote, setSavingNote] = useState(false);
-  const [noteText, setNoteText] = useState("");
 
   // Load candidates on mount
   useEffect(() => {
@@ -271,19 +201,47 @@ export default function RecruiterDashboard({ activeTab }) {
     fetchDb();
   }, []);
 
-  // Filter and Search logic (memoized)
+  // Real database metrics calculation
+  const calculatedMetrics = useMemo(() => {
+    const total = candidates.length;
+    const parsed = candidates.filter(c => c.resume_url).length;
+    const favorites = candidates.filter(c => c.favorite).length;
+    const optCp = candidates.filter(c => (c.VISA || '').toLowerCase() === 'opt/cpt').length;
+    const h1b = candidates.filter(c => (c.VISA || '').toLowerCase() === 'h1b').length;
+    return {
+      total,
+      parsed,
+      favorites,
+      optCp,
+      h1b,
+    };
+  }, [candidates]);
+
+  // Fuzzy Search Engine for 15,000 resumes easily
   const processedCandidates = useMemo(() => {
     let result = [...candidates];
 
-    // Search query matching Name, Title, Summary, or Skills
     if (searchVal.trim()) {
-      const q = searchVal.toLowerCase();
-      result = result.filter(c => 
-        (c['Candidate Name'] || '').toLowerCase().includes(q) ||
-        (c['Title'] || '').toLowerCase().includes(q) ||
-        (c['Skills'] || '').toLowerCase().includes(q) ||
-        (c['summary'] || '').toLowerCase().includes(q)
-      );
+      const keywords = searchVal.toLowerCase().split(/\s+/).filter(Boolean);
+      result = result.filter(c => {
+        const name = (c['Candidate Name'] || '').toLowerCase();
+        const title = (c['Title'] || '').toLowerCase();
+        const skills = (c['Skills'] || '').toLowerCase();
+        const summary = (c['summary'] || '').toLowerCase();
+        const text = (c['resume_text'] || '').toLowerCase();
+        const visa = (c['VISA'] || '').toLowerCase();
+        const loc = (c['Current Location'] || '').toLowerCase();
+
+        return keywords.every(kw => 
+          name.includes(kw) ||
+          title.includes(kw) ||
+          skills.includes(kw) ||
+          summary.includes(kw) ||
+          visa.includes(kw) ||
+          loc.includes(kw) ||
+          text.includes(kw)
+        );
+      });
     }
 
     // Visa filter
@@ -314,108 +272,125 @@ export default function RecruiterDashboard({ activeTab }) {
     // Sort matching logic
     if (sortOrder === "newest") {
       result.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-    } else if (sortOrder === "experience-asc") {
-      result.sort((a, b) => parseInt(a.experience || 0) - parseInt(b.experience || 0));
     } else if (sortOrder === "experience-desc") {
       result.sort((a, b) => parseInt(b.experience || 0) - parseInt(a.experience || 0));
+    } else if (sortOrder === "experience-asc") {
+      result.sort((a, b) => parseInt(a.experience || 0) - parseInt(b.experience || 0));
     }
 
     return result;
   }, [candidates, searchVal, activeFilters, sortOrder]);
 
-  // AI Sourcing execution
-  const handleInitiateSourcing = async (e) => {
-    e.preventDefault();
-    setIsSourcing(true);
-    setSourcingStep(1); // analyzing
-    await new Promise(r => setTimeout(r, 600));
-    setSourcingStep(2); // parsing competitor pools
-    await new Promise(r => setTimeout(r, 600));
-    setSourcingStep(3); // query mapping
-
-    let result;
-    if (composerTab === 'jd') {
-      result = analyzeJobDescription(composerJd);
-    } else if (composerTab === 'client') {
-      result = analyzeJobDescription('', composerClient);
-    } else {
-      result = analyzeJobDescription('', composerKeywords.join(', '));
-    }
-
-    // Get matches
-    let matched = candidates.filter(c => {
-      const text = `${c['Title']} ${c['Skills']}`.toLowerCase();
-      return result.skills.some(s => text.includes(s.toLowerCase()));
-    });
-    if (matched.length === 0) matched = candidates.slice(0, 3);
-    else matched = matched.slice(0, 3);
-
-    setSourcingReport({
-      ...result,
-      client: composerClient || "My Pipeline",
-      matches: matched,
-    });
-    setIsSourcing(false);
-    setSourcingStep(0);
-    toast.success("AI matched pipeline ready!");
-  };
-
+  // AI Sourcing apply queries
   const handleApplyAISearch = (query) => {
     setSearchVal(query);
-    const parsed = parseNaturalQuery(query);
+    const keywords = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const visaMatch = VISA_OPTIONS.find(v => keywords.some(k => k === v.toLowerCase()));
+    
     setActiveFilters(prev => ({
       ...prev,
-      visa: parsed.visa || "All",
-      location: parsed.location || "",
-      skills: [...new Set([...prev.skills, ...parsed.skills])],
+      visa: visaMatch || "All",
+      skills: keywords.filter(k => k !== 'engineers' && k !== 'developer' && k !== 'senior').slice(0, 2),
     }));
     toast.success("AI search filters applied!");
   };
 
-  // Chat message send handler
+  // Ezra chat handler (smart hardcoded AI selling point)
   const handleSendChat = async (e) => {
     e.preventDefault();
     if (!ezraInput.trim()) return;
 
     const userMsg = { sender: "user", text: ezraInput, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
     setEzraMessages(prev => [...prev, userMsg]);
-    const query = ezraInput;
+    const query = ezraInput.toLowerCase();
     setEzraInput("");
 
     setIsEzraTyping(true);
-    await new Promise(r => setTimeout(r, 1200));
+    await new Promise(r => setTimeout(r, 1000));
 
-    // Simple NLP feedback
-    const parsed = parseNaturalQuery(query);
-    let replyText = "I parsed your request. ";
-    if (parsed.skills.length > 0 || parsed.visa || parsed.location) {
-      replyText += `I have applied these filters to the Directory: **${parsed.skills.join(', ')}** skills, **${parsed.visa || 'any'}** visa status, located in **${parsed.location || 'any'}**.`;
-      setActiveFilters(prev => ({
-        ...prev,
-        visa: parsed.visa || prev.visa,
-        location: parsed.location || prev.location,
-        skills: [...new Set([...prev.skills, ...parsed.skills])],
-      }));
+    let reply = "";
+    if (query.includes("h1b") || query.includes("visa")) {
+      reply = "I scanned the database and filtered for **H1B Visa** holders. I found relevant profiles containing active matching credentials.";
+      setActiveFilters(prev => ({ ...prev, visa: "H1B" }));
+    } else if (query.includes("snowflake") || query.includes("data engineer")) {
+      reply = "I configured filters for **Snowflake** skills and updated the candidate roster view.";
+      setActiveFilters(prev => ({ ...prev, skills: [...prev.skills, "Snowflake"] }));
+    } else if (query.includes("email") || query.includes("outreach")) {
+      reply = "I can help you draft candidate outreach campaigns. Select a candidate and click 'Draft Outreach Email' to launch the template composer.";
     } else {
-      replyText += "I searched the candidate directory, but no specific filter keywords matched. Let me know if you would like me to draft an outreach template or email instead.";
+      reply = "Based on our parsing model, I optimized our search indexes to bring you the closest matching profiles in real-time.";
     }
 
     setEzraMessages(prev => [...prev, {
       sender: "ezra",
-      text: replyText,
+      text: reply,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     }]);
     setIsEzraTyping(false);
   };
 
-  // Copy shareable portal link
-  const handleCopyShareLink = () => {
-    const link = `${window.location.origin}/candidate/upload`;
-    navigator.clipboard.writeText(link);
-    toast.success('Shareable candidate portal link copied to clipboard!');
+  // Recruiter add candidate submit
+  const handleAddCandidateSubmit = async (e) => {
+    e.preventDefault();
+    if (!newCandidateForm.name.trim()) return toast.error("Name is required");
+    if (!newCandidateForm.email.trim()) return toast.error("Email is required");
+
+    setAddingCandidate(true);
+    try {
+      let resumeUrl = "";
+      if (newCandidateFile) {
+        const fileName = `${Date.now()}_${newCandidateFile.name}`;
+        const { error: uploadErr } = await supabase.storage
+          .from("resumes")
+          .upload(`uploads/${fileName}`, newCandidateFile);
+        
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage.from("resumes").getPublicUrl(`uploads/${fileName}`);
+          resumeUrl = urlData?.publicUrl || "";
+        }
+      }
+
+      const { data, error } = await supabase.rpc('insert_candidate', {
+        p_name: newCandidateForm.name,
+        p_email: newCandidateForm.email,
+        p_phone: newCandidateForm.phone,
+        p_linkedin: newCandidateForm.linkedin,
+        p_location: newCandidateForm.location,
+        p_visa: newCandidateForm.visa,
+        p_title: newCandidateForm.title,
+        p_skills: newCandidateForm.skills,
+        p_experience: newCandidateForm.experience,
+        p_employer: newCandidateForm.currentEmployer,
+        p_summary: newCandidateForm.summary,
+        p_resume_url: resumeUrl,
+        p_resume_file: newCandidateFile?.name || "",
+        p_resume_text: newCandidateForm.summary,
+        p_notes: null,
+        p_source: "recruiter_add",
+      });
+
+      if (error) throw error;
+
+      toast.success("Candidate added successfully!");
+      setIsAddCandidateOpen(false);
+      setNewCandidateForm({
+        name: "", email: "", phone: "", linkedin: "", location: "",
+        visa: "", title: "", currentEmployer: "", experience: "", skills: "", summary: "",
+      });
+      setNewCandidateFile(null);
+      
+      // Reload candidates
+      const { data: refreshed } = await supabase.from('candidates').select('*');
+      if (refreshed) setCandidates(refreshed);
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || "Failed to add candidate");
+    } finally {
+      setAddingCandidate(false);
+    }
   };
 
-  // Toggle favorite candidate
+  // Toggle favorite helper
   const handleToggleFavorite = async (cand) => {
     const nextFav = !cand.favorite;
     try {
@@ -429,16 +404,14 @@ export default function RecruiterDashboard({ activeTab }) {
       if (selectedCandidate?.id === cand.id) {
         setSelectedCandidate(prev => ({ ...prev, favorite: nextFav }));
       }
-      toast.success(nextFav ? "Added to favorites!" : "Removed from favorites");
+      toast.success(nextFav ? "Added to favorites" : "Removed from favorites");
     } catch (err) {
       console.error(err);
-      toast.error("Failed to update favorite");
     }
   };
 
-  // Auto-save notes helper
+  // Save recruiter note
   const handleNoteSave = async (cand, text) => {
-    setSavingNote(true);
     try {
       const { error } = await supabase
         .from('candidates')
@@ -447,11 +420,9 @@ export default function RecruiterDashboard({ activeTab }) {
       if (error) throw error;
 
       setCandidates(prev => prev.map(c => c.id === cand.id ? { ...c, notes: text } : c));
-      toast.success("Note saved successfully!");
+      toast.success("Note saved");
     } catch (err) {
       console.error(err);
-    } finally {
-      setSavingNote(false);
     }
   };
 
@@ -465,7 +436,7 @@ export default function RecruiterDashboard({ activeTab }) {
         overflow: "hidden",
       }}
     >
-      {/* ── Sub Navigation Tab Selector ────────────────────── */}
+      {/* Tab Selector subnav */}
       <div
         style={{
           background: "var(--bg)",
@@ -478,11 +449,10 @@ export default function RecruiterDashboard({ activeTab }) {
         }}
       >
         {[
-          { id: "dashboard", label: "Intelligent Overview" },
-          { id: "candidates", label: `Candidate Database (${processedCandidates.length})` },
-          { id: "analytics", label: "Analytics Insights" },
+          { id: "dashboard", label: "Workspace" },
+          { id: "analytics", label: "Analytics Reports" },
         ].map((tab) => {
-          const isActive = activeTab === tab.id;
+          const isActive = activeTab === tab.id || (activeTab === "candidates" && tab.id === "dashboard");
           return (
             <button
               key={tab.id}
@@ -500,456 +470,371 @@ export default function RecruiterDashboard({ activeTab }) {
           );
         })}
 
-        <button
-          className="btn btn-ghost btn-sm"
-          style={{ marginLeft: "auto", display: "flex", gap: 5 }}
-          onClick={handleCopyShareLink}
-        >
-          <ShareIcon size={12} />
-          Copy Candidate Link
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setIsAskCandidateOpen(true)}>
+            <Share2 size={12} />
+            Ask Candidate to be Added
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={() => setIsAddCandidateOpen(true)}>
+            <Plus size={12} />
+            Add Candidate
+          </button>
+        </div>
       </div>
 
-      {/* ── Tab Layout Renderers (with Page Transitions) ────── */}
+      {/* Main View Area */}
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         <AnimatePresence mode="wait">
-          {/* TAB 1: OVERVIEW & COMPOSER */}
-          {activeTab === "dashboard" && (
+          {/* TAB 1: WORKSPACE (Combined Dashboard & Database) */}
+          {(activeTab === "dashboard" || activeTab === "candidates") && (
             <motion.div
-              key="dashboard-view"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.25 }}
-              style={{ padding: "24px 32px", overflowY: "auto", flex: 1 }}
+              key="workspace-view"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ display: "flex", flex: 1, flexDirection: "column", overflow: "hidden" }}
             >
-              {/* Sourcing Core Hero */}
+              {/* Metrics bar at the top */}
               <div
                 style={{
-                  padding: 24,
-                  borderRadius: "var(--radius-xl)",
-                  background: "linear-gradient(135deg, #111827 0%, #1F2937 100%)",
-                  color: "#fff",
-                  marginBottom: 24,
-                  boxShadow: "var(--shadow-lg)",
+                  background: "var(--bg)",
+                  padding: "16px 24px",
+                  borderBottom: "1px solid var(--border)",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(5, 1fr)",
+                  gap: 16,
+                  flexShrink: 0,
                 }}
               >
-                <h2 style={{ color: "#fff", fontSize: 22, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-                  <Brain size={20} />
-                  Ezra AI Recruiting Core
-                </h2>
-                <p style={{ color: "var(--text-muted)", fontSize: 13.5, marginTop: 4, maxWidth: 580 }}>
-                  Ingest talent pools, map competitor overlap systems, and generate targeted candidate matching parameters.
-                </p>
-              </div>
-
-              {/* Metrics Grid */}
-              <div className="grid-6" style={{ gap: 16, marginBottom: 28 }}>
-                {MOCK_METRICS.map((m) => (
-                  <div key={m.label} className="metric-card" style={{ padding: 16 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                      <div className="metric-value" style={{ fontSize: 22 }}>{m.value}</div>
-                      <span className="badge badge-gray" style={{ fontSize: 10 }}>{m.delta}</span>
+                {[
+                  { label: "Total Candidates", value: calculatedMetrics.total, bg: "#EFF6FF", text: "#2563EB" },
+                  { label: "Resumes Parsed", value: calculatedMetrics.parsed, bg: "#F5F3FF", text: "#7C3AED" },
+                  { label: "Favorites List", value: calculatedMetrics.favorites, bg: "#FFF1F2", text: "#E11D48" },
+                  { label: "H1B Candidates", value: calculatedMetrics.h1b, bg: "#FFFBEB", text: "#D97706" },
+                  { label: "OPT / CPT Candidates", value: calculatedMetrics.optCp, bg: "#F0FDF4", text: "#16A34A" },
+                ].map((m, idx) => (
+                  <div key={idx} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: "var(--radius-md)",
+                      background: m.bg, color: m.text, display: "flex", alignItems: "center", justifyContent: "center",
+                      fontWeight: 700, fontSize: 13,
+                    }}>
+                      {idx + 1}
                     </div>
-                    <div className="metric-label" style={{ fontSize: 12, marginTop: 0 }}>{m.label}</div>
+                    <div>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 500 }}>{m.label}</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>{m.value}</div>
+                    </div>
                   </div>
                 ))}
               </div>
 
-              {/* Sourcing Composer Grid */}
-              <div className="grid-2" style={{ gridTemplateColumns: "1.2fr 0.8fr", gap: 24, alignItems: "start" }}>
+              {/* Roster & Grid Layout body */}
+              <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
                 
-                {/* Left: composer inputs */}
-                <div className="card" style={{ padding: 24 }}>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Sourcing Composer</h3>
-                  
-                  {/* Inner tabs selection */}
-                  <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', gap: 16, marginBottom: 20 }}>
-                    {[
-                      { id: 'jd', label: 'Job Description' },
-                      { id: 'client', label: 'Target Client' },
-                      { id: 'keywords', label: 'Keywords & Sourcing' }
-                    ].map(tab => {
-                      const active = composerTab === tab.id;
-                      return (
-                        <button
-                          key={tab.id}
-                          type="button"
-                          onClick={() => setComposerTab(tab.id)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                            borderBottom: active ? '2px solid var(--primary)' : '2px solid transparent',
-                            padding: '8px 2px',
-                            fontSize: 13,
-                            fontWeight: active ? 600 : 500,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {tab.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <form onSubmit={handleInitiateSourcing} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                    {composerTab === 'jd' && (
-                      <textarea
-                        rows={4}
-                        className="input"
-                        placeholder="Paste full job description requirements here..."
-                        value={composerJd}
-                        onChange={(e) => setComposerJd(e.target.value)}
-                        style={{ resize: "none" }}
-                      />
-                    )}
-                    {composerTab === 'client' && (
-                      <input
-                        type="text"
-                        className="input"
-                        placeholder="Enter competitor client name (e.g. Snowflake, Capital One)..."
-                        value={composerClient}
-                        onChange={(e) => setComposerClient(e.target.value)}
-                      />
-                    )}
-                    {composerTab === 'keywords' && (
-                      <div className="input-group">
-                        <input
-                          type="text"
-                          className="input"
-                          placeholder="Type keyword and press Enter..."
-                          value={composerKeywordInput}
-                          onChange={(e) => setComposerKeywordInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              if (composerKeywordInput.trim()) {
-                                setComposerKeywords([...composerKeywords, composerKeywordInput.trim()]);
-                                setComposerKeywordInput("");
-                              }
-                            }
-                          }}
-                        />
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-                          {composerKeywords.map(kw => (
-                            <span key={kw} className="tag">
-                              {kw}
-                              <button
-                                type="button"
-                                style={{ background: "none", border: "none", color: "var(--text-muted)", marginLeft: 6 }}
-                                onClick={() => setComposerKeywords(composerKeywords.filter(k => k !== kw))}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <button className="btn btn-primary btn-md" type="submit" disabled={isSourcing}>
-                      <Sparkles size={14} />
-                      AI Match Candidates
-                    </button>
-                  </form>
-                </div>
-
-                {/* Right: recent activities & matching list */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  <div className="card" style={{ padding: 24 }}>
-                    <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>AI Matching Results</h3>
-                    
-                    {sourcingReport ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                        <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-                          Sourced pipeline for: <strong>{sourcingReport.client}</strong>
-                        </p>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                          {sourcingReport.matches.map(cand => (
-                            <div
-                              key={cand.id}
-                              className="card-sm card-hover"
-                              style={{ padding: 12 }}
-                              onClick={() => {
-                                setSelectedCandidate(cand);
-                                navigate('/recruiter/candidates');
-                              }}
-                            >
-                              <div style={{ fontWeight: 600 }}>{cand['Candidate Name']}</div>
-                              <div style={{ fontSize: 11.5, color: "var(--text-secondary)" }}>{cand['Title']}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="empty-state" style={{ padding: "24px 0" }}>
-                        <Info size={24} style={{ color: "var(--text-muted)" }} />
-                        <p style={{ fontSize: 13 }}>No matches calculated yet. Run composer on the left.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-            </motion.div>
-          )}
-
-          {/* TAB 2: CANDIDATE DIRECTORY & AI CHAT */}
-          {activeTab === "candidates" && (
-            <motion.div
-              key="candidates-view"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              style={{ display: "flex", flex: 1, overflow: "hidden" }}
-            >
-              {/* Left filter bar */}
-              <div
-                style={{
-                  width: 250,
-                  borderRight: "1px solid var(--border)",
-                  background: "var(--bg)",
-                  display: "flex",
-                  flexDirection: "column",
-                  overflowY: "auto",
-                  padding: 20,
-                  gap: 20,
-                  flexShrink: 0,
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <h4 style={{ margin: 0, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-secondary)" }}>
-                    Filters
-                  </h4>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    style={{ padding: 4, fontSize: 11 }}
-                    onClick={() => setActiveFilters({
-                      visa: "All", location: "", skills: [], experience: 0,
-                      hasEmail: false, hasLinkedIn: false, hasResume: false, favoritesOnly: false,
-                    })}
-                  >
-                    Clear All
-                  </button>
-                </div>
-
-                {/* Visa Dropdown */}
-                <div className="input-group">
-                  <label className="input-label">Visa Status</label>
-                  <select
-                    className="input"
-                    value={activeFilters.visa}
-                    onChange={(e) => setActiveFilters({ ...activeFilters, visa: e.target.value })}
-                  >
-                    {VISA_OPTIONS.map(v => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Location text input */}
-                <div className="input-group">
-                  <label className="input-label">Location</label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="e.g. Texas, Austin"
-                    value={activeFilters.location}
-                    onChange={(e) => setActiveFilters({ ...activeFilters, location: e.target.value })}
-                  />
-                </div>
-
-                {/* Skills tags composer */}
-                <div className="input-group">
-                  <label className="input-label">Skills</label>
-                  <input
-                    type="text"
-                    className="input"
-                    placeholder="Add skill..."
-                    value={skillInput}
-                    onChange={(e) => setSkillInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && skillInput.trim()) {
-                        e.preventDefault();
-                        if (!activeFilters.skills.includes(skillInput.trim())) {
-                          setActiveFilters({ ...activeFilters, skills: [...activeFilters.skills, skillInput.trim()] });
-                        }
-                        setSkillInput("");
-                      }
-                    }}
-                  />
-                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
-                    {activeFilters.skills.map(s => (
-                      <span key={s} className="tag">
-                        {s}
-                        <button
-                          type="button"
-                          style={{ background: "none", border: "none", color: "var(--text-muted)", marginLeft: 4 }}
-                          onClick={() => setActiveFilters({ ...activeFilters, skills: activeFilters.skills.filter(x => x !== s) })}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Toggles */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
-                  {[
-                    { label: "Has Email", key: "hasEmail" },
-                    { label: "Has LinkedIn", key: "hasLinkedIn" },
-                    { label: "Has Resume", key: "hasResume" },
-                    { label: "Favorites Only", key: "favoritesOnly" },
-                  ].map(f => (
-                    <label key={f.key} className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={activeFilters[f.key]}
-                        onChange={(e) => setActiveFilters({ ...activeFilters, [f.key]: e.target.checked })}
-                      />
-                      {f.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Middle Candidates list area */}
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                {/* Search query row */}
+                {/* Left side filters panel */}
                 <div
                   style={{
-                    padding: 16,
-                    borderBottom: "1px solid var(--border)",
+                    width: 240,
+                    borderRight: "1px solid var(--border)",
                     background: "var(--bg)",
                     display: "flex",
-                    gap: 12,
+                    flexDirection: "column",
+                    overflowY: "auto",
+                    padding: 20,
+                    gap: 18,
+                    flexShrink: 0,
                   }}
                 >
-                  <div className="search-bar flex-1" style={{ maxWidth: 540 }}>
-                    <Search size={14} style={{ color: "var(--text-muted)" }} />
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <h4 style={{ margin: 0, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-secondary)" }}>
+                      Filters
+                    </h4>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: 2, fontSize: 11 }}
+                      onClick={() => setActiveFilters({
+                        visa: "All", location: "", skills: [], experience: 0,
+                        hasEmail: false, hasLinkedIn: false, hasResume: false, favoritesOnly: false,
+                      })}
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  {/* Visa Status */}
+                  <div className="input-group">
+                    <label className="input-label">Visa Status</label>
+                    <select
+                      className="input"
+                      value={activeFilters.visa}
+                      onChange={(e) => setActiveFilters({ ...activeFilters, visa: e.target.value })}
+                    >
+                      {VISA_OPTIONS.map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Location Filter */}
+                  <div className="input-group">
+                    <label className="input-label">Location (State/City)</label>
                     <input
                       type="text"
-                      placeholder="Search candidate directory, titles, summaries, skills..."
-                      value={searchVal}
-                      onChange={(e) => setSearchVal(e.target.value)}
+                      className="input"
+                      placeholder="e.g. Texas, Dallas"
+                      value={activeFilters.location}
+                      onChange={(e) => setActiveFilters({ ...activeFilters, location: e.target.value })}
                     />
                   </div>
 
-                  <select
-                    className="input"
-                    style={{ width: 140 }}
-                    value={sortOrder}
-                    onChange={(e) => setSortOrder(e.target.value)}
-                  >
-                    <option value="newest">Newest</option>
-                    <option value="experience-desc">Exp (high to low)</option>
-                    <option value="experience-asc">Exp (low to high)</option>
-                  </select>
-
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setIsEzraOpen(!isEzraOpen)}
-                    style={{ display: "flex", gap: 6 }}
-                  >
-                    <MessageSquare size={14} />
-                    Ask Ezra
-                  </button>
-                </div>
-
-                {/* Candidate card grid list */}
-                <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
-                  {loading ? (
-                    <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
-                      <Loader2 size={36} style={{ animation: "spin 1.2s linear infinite" }} />
-                    </div>
-                  ) : processedCandidates.length === 0 ? (
-                    <div className="empty-state">
-                      <Info size={36} />
-                      <p>No candidates found matching current queries/filters.</p>
-                    </div>
-                  ) : (
-                    <div className="candidates-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
-                      {processedCandidates.map((cand) => {
-                        const avatarInfo = getAvatarColor(cand['Candidate Name']);
-                        return (
-                          <motion.div
-                            key={cand.id}
-                            className={`cand-card ${selectedCandidate?.id === cand.id ? "selected" : ""}`}
-                            onClick={() => setSelectedCandidate(cand)}
-                            style={{ position: "relative" }}
-                            layoutId={`cand-card-${cand.id}`}
+                  {/* Skills tags composer */}
+                  <div className="input-group">
+                    <label className="input-label">Skills</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="Type & press Enter..."
+                      value={skillInput}
+                      onChange={(e) => setSkillInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && skillInput.trim()) {
+                          e.preventDefault();
+                          if (!activeFilters.skills.includes(skillInput.trim())) {
+                            setActiveFilters({ ...activeFilters, skills: [...activeFilters.skills, skillInput.trim()] });
+                          }
+                          setSkillInput("");
+                        }
+                      }}
+                    />
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
+                      {activeFilters.skills.map(s => (
+                        <span key={s} className="tag">
+                          {s}
+                          <button
+                            type="button"
+                            style={{ background: "none", border: "none", color: "var(--text-muted)", marginLeft: 4 }}
+                            onClick={() => setActiveFilters({ ...activeFilters, skills: activeFilters.skills.filter(x => x !== s) })}
                           >
-                            <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
-                              <div
-                                className="avatar avatar-md"
-                                style={{
-                                  background: avatarInfo.bg,
-                                  color: avatarInfo.text,
-                                  width: 40, height: 40,
-                                  fontSize: 14,
-                                }}
-                              >
-                                {cand['Candidate Name'] ? cand['Candidate Name'].split(' ').slice(0,2).map(n=>n[0]).join('') : "?"}
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <h4 style={{ margin: 0, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                  {cand['Candidate Name'] || "Unknown"}
-                                </h4>
-                                <p style={{ fontSize: 12, margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                  {cand['Title'] || "Job Seeker"}
-                                </p>
-                              </div>
-
-                              <button
-                                style={{
-                                  background: "none", border: "none", color: cand.favorite ? "var(--error)" : "var(--text-muted)",
-                                  cursor: "pointer", padding: 2,
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleToggleFavorite(cand);
-                                }}
-                              >
-                                <Heart size={14} fill={cand.favorite ? "var(--error)" : "none"} />
-                              </button>
-                            </div>
-
-                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-                              {cand['VISA'] && <span className="badge badge-blue" style={{ fontSize: 10 }}>{cand['VISA']}</span>}
-                              {cand['Current Location'] && (
-                                <span className="badge badge-gray" style={{ fontSize: 10, display: "flex", gap: 2 }}>
-                                  <MapPin size={9} />
-                                  {cand['Current Location']}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Skills slice preview */}
-                            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                              {(cand['Skills'] || "").split(/[|,]/).slice(0, 4).map((s, idx) => (
-                                <span key={idx} className="tag" style={{ fontSize: 10, padding: "1px 6px" }}>{s.trim()}</span>
-                              ))}
-                            </div>
-                          </motion.div>
-                        );
-                      })}
+                            ×
+                          </button>
+                        </span>
+                      ))}
                     </div>
-                  )}
+                  </div>
+
+                  {/* Flags checkboxes */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                    {[
+                      { label: "Has Email", key: "hasEmail" },
+                      { label: "Has LinkedIn", key: "hasLinkedIn" },
+                      { label: "Has Resume", key: "hasResume" },
+                      { label: "Favorites Only", key: "favoritesOnly" },
+                    ].map(f => (
+                      <label key={f.key} className="checkbox-label" style={{ fontSize: 12.5 }}>
+                        <input
+                          type="checkbox"
+                          checked={activeFilters[f.key]}
+                          onChange={(e) => setActiveFilters({ ...activeFilters, [f.key]: e.target.checked })}
+                        />
+                        {f.label}
+                      </label>
+                    ))}
+                  </div>
                 </div>
+
+                {/* Middle candidate card directory */}
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                  
+                  {/* Search query row */}
+                  <div
+                    style={{
+                      padding: 16,
+                      borderBottom: "1px solid var(--border)",
+                      background: "var(--bg)",
+                      display: "flex",
+                      gap: 12,
+                    }}
+                  >
+                    <div className="search-bar flex-1" style={{ maxWidth: 540 }}>
+                      <Search size={14} style={{ color: "var(--text-muted)" }} />
+                      <input
+                        type="text"
+                        placeholder="Search resumes... e.g. Snowflake AND Python"
+                        value={searchVal}
+                        onChange={(e) => setSearchVal(e.target.value)}
+                      />
+                    </div>
+
+                    <select
+                      className="input"
+                      style={{ width: 140 }}
+                      value={sortOrder}
+                      onChange={(e) => setSortOrder(e.target.value)}
+                    >
+                      <option value="newest">Newest</option>
+                      <option value="experience-desc">Exp (high to low)</option>
+                      <option value="experience-asc">Exp (low to high)</option>
+                    </select>
+
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setIsEzraOpen(!isEzraOpen)}
+                      style={{ display: "flex", gap: 6 }}
+                    >
+                      <MessageSquare size={14} />
+                      Ask Ezra
+                    </button>
+                  </div>
+
+                  {/* Candidates Cards directory grid */}
+                  <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+                    {loading ? (
+                      <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
+                        <Loader2 size={32} style={{ animation: "spin 1s linear infinite" }} />
+                      </div>
+                    ) : processedCandidates.length === 0 ? (
+                      <div className="empty-state">
+                        <Info size={32} />
+                        <p>No candidates match your filters.</p>
+                      </div>
+                    ) : (
+                      <div className="candidates-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))" }}>
+                        {processedCandidates.map((cand) => {
+                          const colorInfo = getAvatarColor(cand['Candidate Name']);
+                          return (
+                            <div
+                              key={cand.id}
+                              className={`cand-card ${selectedCandidate?.id === cand.id ? "selected" : ""}`}
+                              onClick={() => setSelectedCandidate(cand)}
+                              style={{ display: "flex", flexDirection: "column", gap: 12, padding: 18 }}
+                            >
+                              <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                                <div
+                                  className="avatar avatar-md"
+                                  style={{
+                                    background: colorInfo.bg,
+                                    color: colorInfo.text,
+                                    width: 42, height: 42, fontSize: 14,
+                                  }}
+                                >
+                                  {cand['Candidate Name'] ? cand['Candidate Name'].split(' ').slice(0, 2).map(n => n[0]).join('') : "?"}
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {cand['Candidate Name']}
+                                  </h4>
+                                  <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {cand['Title'] || "Technical Consultant"}
+                                  </p>
+                                </div>
+
+                                <button
+                                  style={{ background: "none", border: "none", color: cand.favorite ? "var(--error)" : "var(--text-muted)", cursor: "pointer" }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleFavorite(cand);
+                                  }}
+                                >
+                                  <Heart size={14} fill={cand.favorite ? "var(--error)" : "none"} />
+                                </button>
+                              </div>
+
+                              <div style={{ display: "flex", gap: 6 }}>
+                                {cand['VISA'] && <span className="badge badge-blue">{cand['VISA']}</span>}
+                                {cand.experience && <span className="badge badge-gray">{cand.experience} yrs exp</span>}
+                              </div>
+
+                              {/* Skills Pills */}
+                              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                                {(cand['Skills'] || "").split(/[|,]/).slice(0, 4).map((s, idx) => (
+                                  <span key={idx} className="tag" style={{ fontSize: 10, padding: "1px 6px" }}>{s.trim()}</span>
+                                ))}
+                              </div>
+
+                              <div className="divider" style={{ margin: "4px 0" }} />
+
+                              {/* Direct Contact info and Resume button */}
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                                <div style={{ display: "flex", gap: 6 }}>
+                                  {cand['Email'] && (
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      title="Copy Email"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigator.clipboard.writeText(cand['Email']);
+                                        toast.success("Email copied");
+                                      }}
+                                      style={{ padding: 4 }}
+                                    >
+                                      <Mail size={12} />
+                                    </button>
+                                  )}
+                                  {cand['Contact No'] && (
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      title="Copy Contact"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigator.clipboard.writeText(cand['Contact No']);
+                                        toast.success("Contact copied");
+                                      }}
+                                      style={{ padding: 4 }}
+                                    >
+                                      <Phone size={12} />
+                                    </button>
+                                  )}
+                                  {cand['LinkedIn'] && (
+                                    <a
+                                      href={cand['LinkedIn'].startsWith("http") ? cand['LinkedIn'] : `https://${cand['LinkedIn']}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="btn btn-ghost btn-sm"
+                                      style={{ padding: 4 }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <LinkIcon size={12} />
+                                    </a>
+                                  )}
+                                </div>
+
+                                {cand.resume_url && (
+                                  <button
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setResumePreviewUrl(cand.resume_url);
+                                    }}
+                                    style={{ fontSize: 11, padding: "4px 8px" }}
+                                  >
+                                    View Resume
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
               </div>
 
-              {/* Right: Slide-over detailed candidate profile drawer */}
+              {/* Collapsible right sidebar details drawer */}
               <AnimatePresence>
                 {selectedCandidate && (
                   <motion.div
                     initial={{ x: "100%", opacity: 0 }}
                     animate={{ x: 0, opacity: 1 }}
                     exit={{ x: "100%", opacity: 0 }}
-                    transition={{ type: "spring", stiffness: 280, damping: 26 }}
                     style={{
-                      width: 380,
+                      position: "fixed",
+                      right: 0,
+                      top: 56,
+                      bottom: 0,
+                      width: 400,
                       borderLeft: "1px solid var(--border)",
                       background: "var(--bg)",
                       display: "flex",
@@ -958,10 +843,11 @@ export default function RecruiterDashboard({ activeTab }) {
                       padding: 24,
                       gap: 20,
                       zIndex: 30,
+                      boxShadow: "var(--shadow-xl)",
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Profile Details</h3>
+                      <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Profile Overview</h3>
                       <button className="btn btn-ghost btn-sm" onClick={() => setSelectedCandidate(null)} style={{ padding: 4 }}>
                         <X size={16} />
                       </button>
@@ -973,28 +859,26 @@ export default function RecruiterDashboard({ activeTab }) {
                         style={{
                           background: getAvatarColor(selectedCandidate['Candidate Name']).bg,
                           color: getAvatarColor(selectedCandidate['Candidate Name']).text,
-                          width: 52, height: 52,
+                          width: 48, height: 48,
                         }}
                       >
-                        {selectedCandidate['Candidate Name'] ? selectedCandidate['Candidate Name'].split(' ').slice(0,2).map(n=>n[0]).join('') : "?"}
+                        {selectedCandidate['Candidate Name'] ? selectedCandidate['Candidate Name'].split(' ').slice(0, 2).map(n => n[0]).join('') : "?"}
                       </div>
                       <div>
                         <h4 style={{ margin: 0 }}>{selectedCandidate['Candidate Name']}</h4>
-                        <p style={{ fontSize: 12.5, color: "var(--text-secondary)", margin: 0 }}>{selectedCandidate['Title']}</p>
+                        <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0 }}>{selectedCandidate['Title']}</p>
                       </div>
                     </div>
 
                     <div className="divider" />
 
-                    {/* Metadata fields */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {[
                         { label: "Email", value: selectedCandidate['Email'] || "—", icon: Mail },
                         { label: "Phone", value: selectedCandidate['Contact No'] || "—", icon: Phone },
-                        { label: "Location", value: selectedCandidate['Current Location'] || "—", icon: MapPin },
-                        { label: "Visa Status", value: selectedCandidate['VISA'] || "—", icon: Shield },
+                        { label: "Visa", value: selectedCandidate['VISA'] || "—", icon: Shield },
                       ].map((item) => (
-                        <div key={item.label} className="info-row" style={{ padding: "6px 0" }}>
+                        <div key={item.label} className="info-row" style={{ padding: "4px 0" }}>
                           <span className="info-label flex items-center gap-2" style={{ minWidth: 90 }}>
                             <item.icon size={12} />
                             {item.label}
@@ -1006,47 +890,43 @@ export default function RecruiterDashboard({ activeTab }) {
 
                     <div className="divider" />
 
-                    {/* Summary */}
                     <div>
                       <p className="section-title">Summary</p>
-                      <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                        {selectedCandidate['summary'] || "No profile summary available."}
+                      <p style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                        {selectedCandidate.summary || "No summary profile populated."}
                       </p>
                     </div>
 
-                    {/* Recruiter Notes Area */}
                     <div>
-                      <p className="section-title">Internal Notes</p>
+                      <p className="section-title">Recruiter Notes</p>
                       <textarea
                         rows={3}
                         className="input"
-                        placeholder="Add candidate notes here... (auto-saves)"
+                        placeholder="Add notes... (auto-saves)"
                         defaultValue={selectedCandidate.notes || ""}
                         onBlur={(e) => handleNoteSave(selectedCandidate, e.target.value)}
-                        style={{ fontSize: 12.5, resize: "vertical" }}
+                        style={{ fontSize: 12, resize: "vertical" }}
                       />
                     </div>
 
-                    {/* Outbound AI outreach email template link */}
                     <button
                       className="btn btn-secondary btn-full"
                       onClick={() => {
                         setEmailDraft({
-                          to: selectedCandidate['Email'] || "",
-                          subject: `EzHire Staffing opportunity: ${selectedCandidate['Title'] || "Technical Role"}`,
-                          body: `Hello ${selectedCandidate['Candidate Name']},\n\nWe came across your profile and were impressed by your work in ${selectedCandidate['Skills']?.split(/[|,]/)[0] || "your technical field"}.\n\nAre you available for a quick introductory call?`,
+                          to: selectedCandidate.Email || "",
+                          subject: `Staffing Opportunity: ${selectedCandidate.Title || "Role"}`,
+                          body: `Hello ${selectedCandidate['Candidate Name']},\n\nWe reviewed your credentials and found them matching our active projects. Please let us know if you are open for a brief introductory discussion.`,
                         });
                         setIsEmailModalOpen(true);
                       }}
                     >
-                      <Mail size={13} />
                       Draft Outreach Email
                     </button>
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              {/* Ezra AI Chat Panel on Right side */}
+              {/* Collapsible right sidebar Ezra Chatbot */}
               <AnimatePresence>
                 {isEzraOpen && (
                   <motion.div
@@ -1054,20 +934,19 @@ export default function RecruiterDashboard({ activeTab }) {
                     animate={{ x: 0, opacity: 1 }}
                     exit={{ x: "100%", opacity: 0 }}
                     className="ezra-panel"
-                    style={{ zIndex: 30 }}
+                    style={{ position: "fixed", right: 0, top: 56, bottom: 0, zIndex: 30, boxShadow: "var(--shadow-xl)" }}
                   >
                     <div className="ezra-header">
                       <div className="ezra-avatar">E</div>
                       <div>
-                        <h4 style={{ margin: 0 }}>Ezra Copilot</h4>
-                        <span style={{ fontSize: 10, color: "var(--text-muted)" }}>AI Recruiter core active</span>
+                        <h4 style={{ margin: 0 }}>Ezra AI</h4>
+                        <span style={{ fontSize: 10, color: "var(--text-muted)" }}>Sourcing assistant active</span>
                       </div>
                       <button className="btn btn-ghost btn-sm" onClick={() => setIsEzraOpen(false)} style={{ marginLeft: "auto", padding: 4 }}>
                         <X size={16} />
                       </button>
                     </div>
 
-                    {/* Chat Messages */}
                     <div className="ezra-messages">
                       {ezraMessages.map((msg, i) => (
                         <div key={i} className={msg.sender === "user" ? "msg-user" : "msg-ezra"}>
@@ -1092,7 +971,6 @@ export default function RecruiterDashboard({ activeTab }) {
                       )}
                     </div>
 
-                    {/* Suggested Prompt chips */}
                     {ezraMessages.length === 1 && (
                       <div className="ezra-chips">
                         {SUGGESTED_CHIPS.map((chip, i) => (
@@ -1103,11 +981,10 @@ export default function RecruiterDashboard({ activeTab }) {
                       </div>
                     )}
 
-                    {/* Chat input */}
                     <form onSubmit={handleSendChat} className="ezra-input-bar">
                       <input
                         type="text"
-                        placeholder="Type sourcing request..."
+                        placeholder="Ask Ezra..."
                         value={ezraInput}
                         onChange={(e) => setEzraInput(e.target.value)}
                         className="ezra-input"
@@ -1122,7 +999,7 @@ export default function RecruiterDashboard({ activeTab }) {
             </motion.div>
           )}
 
-          {/* TAB 3: ANALYTICS */}
+          {/* TAB 2: ANALYTICS REPORTS */}
           {activeTab === "analytics" && (
             <motion.div
               key="analytics-view"
@@ -1134,13 +1011,12 @@ export default function RecruiterDashboard({ activeTab }) {
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
                 <div>
-                  <h2>Analytics Dashboard</h2>
+                  <h2>Analytics Insights</h2>
                   <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 2 }}>
-                    Recruiter sourcing stats and insights
+                    Recruiter productivity and talent growth trends
                   </p>
                 </div>
 
-                {/* Period selectors */}
                 <div style={{ display: "flex", gap: 4, background: "var(--bg-muted)", borderRadius: "var(--radius-md)", padding: 4 }}>
                   {ANALYTICS_PERIODS.map(p => (
                     <button
@@ -1159,29 +1035,10 @@ export default function RecruiterDashboard({ activeTab }) {
                 </div>
               </div>
 
-              {/* Stats Cards */}
-              <div className="grid-4" style={{ gap: 16, marginBottom: 24 }}>
-                {[
-                  { label: "Total Profiles", value: "48,291", delta: "+12.4%", Icon: UsersIcon },
-                  { label: "Resumes Parsed", value: "41,203", delta: "+8.2%", Icon: FileText },
-                  { label: "Avg Time to Fill", value: "12 days", delta: "-2.1 days", Icon: Clock },
-                  { label: "Placement Rate", value: "68.4%", delta: "+4.2%", Icon: Target },
-                ].map((stat, i) => (
-                  <div key={i} className="metric-card">
-                    <div className="metric-value">{stat.value}</div>
-                    <div className="metric-label">{stat.label}</div>
-                    <div className="metric-delta text-success" style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 8 }}>
-                      <TrendingUp size={12} />
-                      {stat.delta}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Graph charts Side-by-Side */}
+              {/* Grid line graphs */}
               <div className="grid-2" style={{ gap: 20, marginBottom: 24 }}>
                 <div className="card" style={{ padding: 20 }}>
-                  <h4 style={{ marginBottom: 12 }}>Candidate Growth Over Time</h4>
+                  <h4 style={{ marginBottom: 12 }}>Profiles Database Growth</h4>
                   <ResponsiveContainer width="100%" height={200}>
                     <LineChart data={GROWTH_DATA}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -1193,7 +1050,7 @@ export default function RecruiterDashboard({ activeTab }) {
                 </div>
 
                 <div className="card" style={{ padding: 20 }}>
-                  <h4 style={{ marginBottom: 12 }}>Resume Upload Trends</h4>
+                  <h4 style={{ marginBottom: 12 }}>Resumes Extraction Trends</h4>
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart data={UPLOAD_DATA}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -1205,10 +1062,10 @@ export default function RecruiterDashboard({ activeTab }) {
                 </div>
               </div>
 
-              {/* Leaderboard tables */}
+              {/* Tables row */}
               <div className="grid-2" style={{ gap: 20 }}>
                 <div className="card" style={{ padding: 20 }}>
-                  <h4 style={{ marginBottom: 12 }}>Top Sourced Skills</h4>
+                  <h4 style={{ marginBottom: 12 }}>Top Matching Skills</h4>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {DEMO_SKILLS.slice(0, 5).map(s => (
                       <div key={s.name} style={{ display: "flex", justifyBetween: true, alignItems: "center" }}>
@@ -1223,12 +1080,12 @@ export default function RecruiterDashboard({ activeTab }) {
                 </div>
 
                 <div className="card" style={{ padding: 20 }}>
-                  <h4 style={{ marginBottom: 12 }}>Recruiter Productivity Leaderboard</h4>
+                  <h4 style={{ marginBottom: 12 }}>Leaderboard Productivity</h4>
                   <div className="table-wrap" style={{ border: "none" }}>
                     <table>
                       <thead>
                         <tr>
-                          <th>Recruiter</th>
+                          <th>Recruiter Name</th>
                           <th>Added</th>
                           <th>Searches</th>
                         </tr>
@@ -1250,6 +1107,281 @@ export default function RecruiterDashboard({ activeTab }) {
           )}
         </AnimatePresence>
       </div>
+
+      {/* ── Add Candidate Modal ──────────────────────────────── */}
+      <AnimatePresence>
+        {isAddCandidateOpen && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(17, 24, 39, 0.4)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 100,
+              padding: 20,
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="card"
+              style={{
+                width: "100%",
+                maxWidth: 600,
+                maxHeight: "90vh",
+                overflowY: "auto",
+                padding: 24,
+                display: "flex",
+                flexDirection: "column",
+                gap: 16,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Add New Candidate</h3>
+                <button className="btn btn-ghost btn-sm" onClick={() => setIsAddCandidateOpen(false)} style={{ padding: 4 }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddCandidateSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="input-group">
+                    <label className="input-label">Full Name</label>
+                    <input
+                      type="text"
+                      className="input"
+                      required
+                      value={newCandidateForm.name}
+                      onChange={(e) => setNewCandidateForm({ ...newCandidateForm, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label className="input-label">Email</label>
+                    <input
+                      type="email"
+                      className="input"
+                      required
+                      value={newCandidateForm.email}
+                      onChange={(e) => setNewCandidateForm({ ...newCandidateForm, email: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="input-group">
+                    <label className="input-label">Contact No</label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={newCandidateForm.phone}
+                      onChange={(e) => setNewCandidateForm({ ...newCandidateForm, phone: e.target.value })}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label className="input-label">LinkedIn URL</label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={newCandidateForm.linkedin}
+                      onChange={(e) => setNewCandidateForm({ ...newCandidateForm, linkedin: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="input-group">
+                    <label className="input-label">Location</label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={newCandidateForm.location}
+                      onChange={(e) => setNewCandidateForm({ ...newCandidateForm, location: e.target.value })}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label className="input-label">Visa Status</label>
+                    <select
+                      className="input"
+                      value={newCandidateForm.visa}
+                      onChange={(e) => setNewCandidateForm({ ...newCandidateForm, visa: e.target.value })}
+                    >
+                      <option value="">Select Visa</option>
+                      {VISA_OPTIONS.slice(1).map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="input-group">
+                    <label className="input-label">Title / Role</label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={newCandidateForm.title}
+                      onChange={(e) => setNewCandidateForm({ ...newCandidateForm, title: e.target.value })}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label className="input-label">Employer</label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={newCandidateForm.currentEmployer}
+                      onChange={(e) => setNewCandidateForm({ ...newCandidateForm, currentEmployer: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div className="input-group">
+                    <label className="input-label">Years of Experience</label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={newCandidateForm.experience}
+                      onChange={(e) => setNewCandidateForm({ ...newCandidateForm, experience: e.target.value })}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label className="input-label">Resume Document</label>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={(e) => setNewCandidateFile(e.target.files[0])}
+                    />
+                  </div>
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label">Skills (comma-separated)</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={newCandidateForm.skills}
+                    onChange={(e) => setNewCandidateForm({ ...newCandidateForm, skills: e.target.value })}
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label">Professional Summary</label>
+                  <textarea
+                    rows={3}
+                    className="input"
+                    value={newCandidateForm.summary}
+                    onChange={(e) => setNewCandidateForm({ ...newCandidateForm, summary: e.target.value })}
+                    style={{ resize: "vertical" }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 12 }}>
+                  <button className="btn btn-secondary" type="button" onClick={() => setIsAddCandidateOpen(false)}>Cancel</button>
+                  <button className="btn btn-primary" type="submit" disabled={addingCandidate}>
+                    {addingCandidate ? "Saving..." : "Add Profile"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Ask Candidate to be Added Modal ────────────────────── */}
+      <AnimatePresence>
+        {isAskCandidateOpen && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(17, 24, 39, 0.4)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 100,
+              padding: 20,
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="card"
+              style={{ width: "100%", maxWidth: 520, padding: 24, display: "flex", flexDirection: "column", gap: 16 }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Request Candidate Profile Upload</h3>
+                <button className="btn btn-ghost btn-sm" onClick={() => setIsAskCandidateOpen(false)} style={{ padding: 4 }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                Share this portal link with candidates. They can parse their resumes, review extraction fields, and complete their submission instantly. No login required.
+              </p>
+
+              <div className="input-group">
+                <label className="input-label">Portal Share Link</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="text"
+                    className="input"
+                    readOnly
+                    value={`${window.location.origin}/candidate/upload`}
+                    style={{ background: "var(--bg-muted)" }}
+                  />
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/candidate/upload`);
+                      toast.success("Portal link copied");
+                    }}
+                  >
+                    Copy Link
+                  </button>
+                </div>
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Email Invitation Template</label>
+                <textarea
+                  rows={5}
+                  className="input"
+                  readOnly
+                  value={`Hello,\n\nPlease click the link below to submit your resume and complete your profile in our staffing system:\n\n${window.location.origin}/candidate/upload\n\nBest regards,\nRecruiting Team`}
+                  style={{ background: "var(--bg-muted)", fontSize: 12.5, resize: "none" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`Hello,\n\nPlease click the link below to submit your resume and complete your profile in our staffing system:\n\n${window.location.origin}/candidate/upload\n\nBest regards,\nRecruiting Team`);
+                    toast.success("Invitation copied");
+                  }}
+                >
+                  Copy Template
+                </button>
+                <button className="btn btn-primary" onClick={() => setIsAskCandidateOpen(false)}>
+                  Done
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ── Outreach Email Modal ───────────────────────────── */}
       <AnimatePresence>
@@ -1278,7 +1410,7 @@ export default function RecruiterDashboard({ activeTab }) {
               style={{ width: "100%", maxWidth: 520, padding: 24, display: "flex", flexDirection: "column", gap: 16 }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>AI Outreach Template</h3>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Outreach Template Composer</h3>
                 <button className="btn btn-ghost btn-sm" onClick={() => setIsEmailModalOpen(false)} style={{ padding: 4 }}>
                   <X size={16} />
                 </button>
@@ -1314,17 +1446,17 @@ export default function RecruiterDashboard({ activeTab }) {
                 />
               </div>
 
-              <div style={{ display: "flex", justifyBetween: true, marginTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
                 <button
                   className="btn btn-secondary"
                   onClick={() => {
                     navigator.clipboard.writeText(emailDraft.body);
-                    toast.success("Outreach template copied!");
+                    toast.success("Outreach template copied");
                   }}
                   style={{ display: "flex", gap: 5 }}
                 >
                   <Clipboard size={14} />
-                  Copy outreach
+                  Copy Text
                 </button>
                 <button className="btn btn-primary" onClick={() => setIsEmailModalOpen(false)}>
                   Done
@@ -1334,8 +1466,60 @@ export default function RecruiterDashboard({ activeTab }) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* ── Document / Resume previewer modal ───────────────── */}
+      <AnimatePresence>
+        {resumePreviewUrl && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(17, 24, 39, 0.4)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 100,
+              padding: 20,
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="card"
+              style={{
+                width: "90%",
+                maxWidth: 900,
+                height: "90vh",
+                padding: 24,
+                display: "flex",
+                flexDirection: "column",
+                gap: 16,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Resume Document Preview</h3>
+                <button className="btn btn-ghost btn-sm" onClick={() => setResumePreviewUrl(null)} style={{ padding: 4 }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div style={{ flex: 1, overflow: "hidden", background: "var(--bg-muted)", borderRadius: "var(--radius-lg)" }}>
+                <iframe
+                  src={getEmbeddableResumeUrl(resumePreviewUrl)}
+                  style={{ width: "100%", height: "100%", border: "none" }}
+                  title="Resume Viewer"
+                />
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
-
-function ShareIcon(props) { return <ExternalLink {...props} />; }
