@@ -2626,8 +2626,6 @@ export default function CandidateDatabase() {
       // Limit response to 1000 matching candidates (Supabase cap)
       query = query.limit(1000);
 
-      const { data, error } = await query;
-
       // Get the exact count of all matching candidates in the database via a fast HEAD query
       let countQuery = supabase
         .from('candidates')
@@ -2658,7 +2656,10 @@ export default function CandidateDatabase() {
         else countQuery = countQuery.or('Contact No.is.null,Contact No.eq.');
       }
 
-      const { count: exactCount } = await countQuery;
+      // Execute both queries in parallel for peak performance
+      const [dataResult, countResult] = await Promise.all([query, countQuery]);
+      const { data, error } = dataResult;
+      const exactCount = countResult.count;
 
       if (error) {
         console.error('Error fetching candidates from Supabase:', error);
