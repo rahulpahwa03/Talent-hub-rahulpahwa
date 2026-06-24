@@ -43,7 +43,7 @@ function App() {
         <Route path="/recruiter" element={<RecruiterLayout />}>
           <Route index element={<Navigate to="/recruiter/dashboard" replace />} />
           <Route path="dashboard"  element={<Dashboard activeTab="dashboard" />} />
-          <Route path="candidates" element={<Dashboard activeTab="candidates" />} />
+          <Route path="candidates" element={<CandidateDatabase />} />
           <Route path="analytics"  element={<Dashboard activeTab="analytics" />} />
           <Route path="candidates/:id" element={<CandidateProfile />} />
         </Route>
