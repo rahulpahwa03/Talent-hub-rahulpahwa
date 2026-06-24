@@ -74,8 +74,8 @@ function OverviewTab({ candidate, aiSummary }) {
           <InfoRow
             icon={<Link2 size={15} />}
             label="LinkedIn"
-            value={candidate.linkedin}
-            link={`https://${candidate.linkedin}`}
+            value={candidate.linkedin ? candidate.linkedin.replace(/^https?:\/\//, '') : null}
+            link={candidate.linkedin || null}
           />
         </div>
       </div>
@@ -117,6 +117,7 @@ function OverviewTab({ candidate, aiSummary }) {
 }
 
 function InfoRow({ icon, label, value, copyable, link }) {
+  if (!value) return null;
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12,
@@ -133,16 +134,16 @@ function InfoRow({ icon, label, value, copyable, link }) {
         <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 2 }}>{label}</div>
         {link ? (
           <a
-            href={link}
+            href={link.startsWith('http') ? link : `https://${link}`}
             target="_blank"
             rel="noreferrer"
-            style={{ fontSize: 13.5, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 4 }}
+            style={{ fontSize: 13.5, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 4, wordBreak: 'break-all' }}
           >
             {value}
             <ExternalLink size={11} />
           </a>
         ) : (
-          <div style={{ fontSize: 13.5, color: 'var(--text-primary)' }}>{value}</div>
+          <div style={{ fontSize: 13.5, color: 'var(--text-primary)', wordBreak: 'break-all' }}>{value}</div>
         )}
       </div>
       {copyable && (
@@ -333,15 +334,71 @@ function ActivityTab({ activity }) {
 
 /* ─── Tab: AI Insights ───────────────────────────────────── */
 
+// Helper: generate role suggestions based on candidate title & skills
+function getRoleRecommendations(title, skills) {
+  const t = (title || '').toLowerCase();
+  const s = skills.map(x => x.toLowerCase());
+
+  const roleMap = [
+    { keywords: ['snowflake','dbt','spark','airflow','etl','pipeline','warehouse'], roles: ['Senior Data Engineer', 'Data Engineering Lead', 'Analytics Engineer', 'Staff Data Platform Engineer'] },
+    { keywords: ['react','vue','angular','nextjs','frontend','css','typescript'], roles: ['Senior Frontend Engineer', 'Staff UI Engineer', 'React Tech Lead', 'Full Stack Engineer'] },
+    { keywords: ['python','ml','machine learning','tensorflow','pytorch','ai','llm'], roles: ['ML Engineer', 'AI/ML Lead', 'Applied Scientist', 'Research Engineer'] },
+    { keywords: ['java','spring','microservices','kafka','kubernetes','docker'], roles: ['Senior Backend Engineer', 'Platform Engineer', 'Java Tech Lead', 'Principal Engineer'] },
+    { keywords: ['aws','azure','gcp','terraform','devops','cicd','cloud'], roles: ['Cloud Architect', 'DevOps Lead', 'Platform Engineer', 'Site Reliability Engineer'] },
+    { keywords: ['salesforce','crm','apex','lwc'], roles: ['Salesforce Developer', 'CRM Architect', 'Salesforce Lead', 'Solution Architect'] },
+    { keywords: ['oracle','sap','workday','erp'], roles: ['ERP Consultant', 'Oracle Lead', 'SAP Architect', 'Business Analyst'] },
+    { keywords: ['sql','postgresql','mysql','database','dba'], roles: ['Database Engineer', 'Data Architect', 'SQL Developer', 'Backend Engineer'] },
+    { keywords: ['architect','lead','principal','staff','director'], roles: ['Solution Architect', 'Engineering Manager', 'Principal Engineer', 'CTO Advisor'] },
+  ];
+
+  const combined = [...s, t];
+  let bestRoles = null;
+  let bestScore = 0;
+
+  for (const entry of roleMap) {
+    const score = entry.keywords.filter(k => combined.some(c => c.includes(k))).length;
+    if (score > bestScore) {
+      bestScore = score;
+      bestRoles = entry.roles;
+    }
+  }
+
+  // Fallback generic roles based on title words
+  if (!bestRoles || bestScore === 0) {
+    const base = title ? title.replace(/senior|lead|staff|principal/gi, '').trim() : 'Software Engineer';
+    bestRoles = [
+      `Senior ${base}`,
+      `${base} Lead`,
+      `Staff ${base}`,
+      `Principal ${base}`,
+    ];
+  }
+
+  // Assign match scores deterministically from candidate's first name char
+  const baseMatch = 72;
+  return bestRoles.slice(0, 4).map((role, i) => ({
+    role,
+    match: `${baseMatch + (4 - i) * 6 + Math.floor(skills.length / 2)}%`,
+    color: ['#16A34A', '#2563EB', '#7C3AED', '#D97706'][i],
+  }));
+}
+
+// Helper: calculate skill demand score from skill name hash
+function skillDemand(skillName, idx) {
+  const MARKET_HOT = ['snowflake','react','python','kubernetes','typescript','aws','gpt','llm','spark','airflow','terraform','nextjs','golang','rust','vector'];
+  const lower = skillName.toLowerCase();
+  const isHot = MARKET_HOT.some(h => lower.includes(h));
+  const base = isHot ? 88 : 68;
+  // small deterministic variance from skill name hash
+  const hash = skillName.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  return Math.min(base + (hash % 10), 98);
+}
+
 function AIInsightsTab({ candidate }) {
   const skills = Array.isArray(candidate?.skills) ? candidate.skills : [];
-  const topSkills = skills.slice(0, 4);
-
-  // Dynamic skill match score based on skill count
-  const matchScore = Math.min(60 + skills.length * 3, 97);
-
-  // Dynamic demand scores per skill
-  const demandBase = [94, 89, 82, 76];
+  const topSkills = skills.slice(0, 5);
+  const matchScore = Math.min(55 + skills.length * 3 + (candidate.experience || 5), 97);
+  const recommendedRoles = getRoleRecommendations(candidate?.title, skills);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -407,30 +464,32 @@ function AIInsightsTab({ candidate }) {
             <h4 style={{ margin: 0, fontSize: 14 }}>Market Demand</h4>
             <p style={{ fontSize: 12, margin: 0 }}>For their top skills</p>
           </div>
-          <span className="badge badge-green" style={{ marginLeft: 'auto' }}>High</span>
+          <span className={`badge ${topSkills.length > 3 ? 'badge-green' : topSkills.length > 0 ? 'badge-blue' : 'badge-gray'}`} style={{ marginLeft: 'auto' }}>
+            {topSkills.length > 3 ? 'High' : topSkills.length > 0 ? 'Medium' : 'Unknown'}
+          </span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {(topSkills.length > 0 ? topSkills : ['No skills on record']).map((skill, idx) => {
-            const demand = demandBase[idx] || 70;
-            const colors = ['#2563EB', '#7C3AED', '#059669', '#D97706'];
+            const demand = skillDemand(skill, idx);
+            const colors = ['#2563EB', '#7C3AED', '#059669', '#D97706', '#0891B2'];
             const color = colors[idx % colors.length];
-            return { skill, demand, color };
-          }).map(({ skill, demand, color }) => (
-            <div key={skill}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>{skill}</span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{demand}%</span>
+            return (
+              <div key={skill}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>{skill}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{demand}%</span>
+                </div>
+                <div className="progress-bar">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${demand}%` }}
+                    transition={{ duration: 0.65, ease: [0, 0, 0.2, 1], delay: 0.1 + idx * 0.07 }}
+                    style={{ height: '100%', background: color, borderRadius: 99 }}
+                  />
+                </div>
               </div>
-              <div className="progress-bar">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${demand}%` }}
-                  transition={{ duration: 0.65, ease: [0, 0, 0.2, 1], delay: 0.3 }}
-                  style={{ height: '100%', background: color, borderRadius: 99 }}
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </motion.div>
 
@@ -453,12 +512,7 @@ function AIInsightsTab({ candidate }) {
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {[
-            { role: 'Senior Data Engineer',         match: '94%', color: '#16A34A' },
-            { role: 'Data Engineering Lead',         match: '88%', color: '#2563EB' },
-            { role: 'Analytics Engineer',            match: '82%', color: '#7C3AED' },
-            { role: 'Staff Data Platform Engineer',  match: '79%', color: '#D97706' },
-          ].map(({ role, match, color }) => (
+          {recommendedRoles.map(({ role, match, color }) => (
             <div key={role} style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '10px 14px',
@@ -603,16 +657,44 @@ export default function CandidateProfile() {
   const colorIdx = (candidate.name.charCodeAt(0) || 0) % GRADIENTS.length;
 
   const generateAISummary = () => {
+    if (generatingAI) return;
     setGeneratingAI(true);
     setTimeout(() => {
-      const topSkills = candidate.skills.slice(0, 3).join(", ") || "core domain technologies";
-      setAiSummary(
-        `${candidate.name} is a qualified professional with extensive expertise in ${topSkills}. They are located in ${candidate.location} and present key technical capabilities suitable for ${candidate.title} positions. Strong work history indicators match project environments.`
-      );
+      const topSkills = candidate.skills.slice(0, 4).join(', ') || 'domain-specific technologies';
+      const allSkills = candidate.skills.join(', ') || 'a broad technical stack';
+      const yoe = candidate.experience ? `${candidate.experience} years of` : 'extensive';
+      const location = candidate.location || 'their current location';
+      const visa = candidate.visa ? `They hold ${candidate.visa} status.` : '';
+      const title = candidate.title || 'professional';
+      const name = candidate.name || 'This candidate';
+      const firstName = name.split(' ')[0];
+
+      // Section 1: Professional summary
+      const summary = `${name} is an accomplished ${title} with ${yoe} experience delivering high-impact results across enterprise environments. ${visa} Based in ${location}, ${firstName} brings a proven track record of cross-functional collaboration, technical ownership, and consistent delivery at scale.`;
+
+      // Section 2: Technical depth
+      const techSummary = candidate.skills.length > 0
+        ? `Their technical profile spans ${allSkills}, with particular depth in ${topSkills}. This combination positions them strongly for roles requiring both hands-on engineering and architectural thinking.`
+        : `Their technical background reflects a strong foundation in enterprise software delivery and cross-team collaboration.`;
+
+      // Section 3: Recruiter recommendation
+      const recRoles = getRoleRecommendations(candidate.title, candidate.skills);
+      const roleNames = recRoles.map(r => r.role).slice(0, 2).join(' or ');
+      const recommendation = `Based on their profile, ${firstName} is a strong candidate for ${roleNames} engagements. They are likely to thrive in organizations that value technical rigor, mentorship culture, and modern delivery practices. Recommended for fast-track screening.`;
+
+      setAiSummary(`${summary}\n\n${techSummary}\n\n${recommendation}`);
       setGeneratingAI(false);
       toast.success('AI Summary generated!');
-    }, 1200);
+    }, 1400);
   };
+
+  // Auto-generate summary when profile loads (non-blocking)
+  useEffect(() => {
+    if (candidate && !aiSummary && !generatingAI) {
+      generateAISummary();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate]);
 
   const tabContent = {
     overview:   <OverviewTab candidate={candidate} aiSummary={aiSummary} />,

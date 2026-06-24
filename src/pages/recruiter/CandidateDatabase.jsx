@@ -2018,6 +2018,7 @@ function CandidatesPanel({
   loading = false,
   totalCandidatesCount = 0
 }) {
+  const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState(null);
 
   // Pagination state
@@ -2182,7 +2183,12 @@ function CandidatesPanel({
                   key={c.id}
                   candidate={c}
                   selected={selectedId === c.id}
-                  onClick={() => { setSelectedId(c.id); onViewProfile(c); }}
+                  onClick={() => {
+                    setSelectedId(c.id);
+                    // Navigate directly to the full profile page on card click
+                    const profileId = c.id || c.candidate_uuid;
+                    navigate(`/recruiter/profile/${profileId}`);
+                  }}
                   onDraftEmail={onDraftEmail}
                   onUploadResume={handleUploadResume}
                   onUpdateCandidate={onUpdateCandidate}
@@ -2798,9 +2804,11 @@ export default function CandidateDatabase() {
 
   // Fetch actual database candidates whenever search or filters change (debounced)
   useEffect(() => {
+    // Minimum search length: don't fire for single-char typos
+    if (search.trim().length === 1) return;
     const timer = setTimeout(() => {
       loadCandidates();
-    }, 350);
+    }, 500); // 500ms debounce — responsive but won't hammer Supabase on every keystroke
     return () => clearTimeout(timer);
   }, [search, statusFilter, visaFilter, workPref, expFilter, resumeFilter, linkedinFilter, emailFilter, phoneFilter]);
 
@@ -2817,8 +2825,9 @@ export default function CandidateDatabase() {
   }, []);
 
   function viewProfile(candidate) {
-    setSelectedCandidate(candidate);
-    setView('detail');
+    // Navigate to standalone profile page using the Supabase numeric id (most reliable)
+    const profileId = candidate.id || candidate.candidate_uuid || candidate.id;
+    navigate(`/recruiter/profile/${profileId}`);
   }
 
   function openDraftEmail(candidate) {
