@@ -1362,7 +1362,23 @@ function EzraPanel({ candidates, isOpen, onClose, onViewProfile, onDraftEmail, s
   );
 }
 
-// ─── CANDIDATE GRID CARD ─────────────────────────────────────────────────────
+// ─── PREMIUM CANDIDATE GRID CARD ─────────────────────────────────────────────
+const CARD_GRADIENTS = [
+  'linear-gradient(135deg, #667eea, #764ba2)',
+  'linear-gradient(135deg, #f093fb, #f5576c)',
+  'linear-gradient(135deg, #4facfe, #00f2fe)',
+  'linear-gradient(135deg, #43e97b, #38f9d7)',
+  'linear-gradient(135deg, #fa709a, #fee140)',
+  'linear-gradient(135deg, #a18cd1, #fbc2eb)',
+  'linear-gradient(135deg, #ffecd2, #fcb69f)',
+  'linear-gradient(135deg, #a1c4fd, #c2e9fb)',
+];
+
+function getCardGradient(name) {
+  const code = (name || '').charCodeAt(0) || 0;
+  return CARD_GRADIENTS[code % CARD_GRADIENTS.length];
+}
+
 function CandidateGridCard({ candidate, selected, onClick, onDraftEmail, onUploadResume, onUpdateCandidate }) {
   const [bookmarked, setBookmarked] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -1377,8 +1393,21 @@ function CandidateGridCard({ candidate, selected, onClick, onDraftEmail, onUploa
   });
 
   const allSkills = Object.values(candidate.skills || {}).flat();
-  const shown = allSkills.slice(0, 4);
+  const shown = allSkills.slice(0, 3);
   const extra = allSkills.length - shown.length;
+  const gradient = getCardGradient(candidate.name);
+  const inits = initials(candidate.name);
+
+  // Profile completeness score for badge
+  const completenessScore = Math.min(
+    30 +
+    (candidate.email ? 15 : 0) +
+    (candidate.phone ? 10 : 0) +
+    (candidate.linkedin ? 10 : 0) +
+    (candidate.resume_url ? 20 : 0) +
+    (allSkills.length > 0 ? 15 : 0),
+    100
+  );
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -1410,142 +1439,191 @@ function CandidateGridCard({ candidate, selected, onClick, onDraftEmail, onUploa
           <button className="btn-ghost sm" style={{ padding: 4 }} onClick={() => setIsEditing(false)}>Cancel</button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>Candidate Name</label>
-            <input
-              type="text"
-              value={editForm.name}
-              onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
-              placeholder="Candidate Name"
-              required
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>Email</label>
-            <input
-              type="email"
-              value={editForm.email}
-              onChange={e => setEditForm(prev => ({ ...prev, email: e.target.value }))}
-              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
-              placeholder="Email Address"
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>Phone</label>
-            <input
-              type="text"
-              value={editForm.phone}
-              onChange={e => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
-              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
-              placeholder="Phone Number"
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>Location</label>
-            <input
-              type="text"
-              value={editForm.location}
-              onChange={e => setEditForm(prev => ({ ...prev, location: e.target.value }))}
-              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
-              placeholder="Location"
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>Visa Status</label>
-            <input
-              type="text"
-              value={editForm.visa}
-              onChange={e => setEditForm(prev => ({ ...prev, visa: e.target.value }))}
-              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
-              placeholder="Visa Status"
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>LinkedIn</label>
-            <input
-              type="text"
-              value={editForm.linkedin}
-              onChange={e => setEditForm(prev => ({ ...prev, linkedin: e.target.value }))}
-              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
-              placeholder="LinkedIn URL"
-            />
-          </div>
+          {[
+            { label: 'Name', key: 'name', type: 'text' },
+            { label: 'Email', key: 'email', type: 'email' },
+            { label: 'Phone', key: 'phone', type: 'text' },
+            { label: 'Location', key: 'location', type: 'text' },
+            { label: 'Visa Status', key: 'visa', type: 'text' },
+            { label: 'LinkedIn', key: 'linkedin', type: 'text' },
+          ].map(({ label, key, type }) => (
+            <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <label style={{ fontSize: 10, fontWeight: 500, color: '#6B6B8A' }}>{label}</label>
+              <input
+                type={type}
+                value={editForm[key] || ''}
+                onChange={e => setEditForm(prev => ({ ...prev, [key]: e.target.value }))}
+                style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #E8E6F0', borderRadius: 4, width: '100%', background: '#fff' }}
+              />
+            </div>
+          ))}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn-filled sm" style={{ flex: 1, padding: '6px' }} onClick={handleSave} disabled={isUploading}>
-            Save Details
-          </button>
-        </div>
+        <button className="btn-filled sm" style={{ width: '100%' }} onClick={handleSave} disabled={isUploading}>
+          {isUploading ? 'Saving...' : 'Save Changes'}
+        </button>
       </div>
     );
   }
 
   return (
-    <div className={`cand-card${selected ? ' selected' : ''}`} onClick={onClick}>
-      {/* Top row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <Avatar name={candidate.name} size={42} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#1A1A2E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{candidate.name}</div>
-          <div style={{ fontSize: 12, color: '#6B6B8A', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{candidate.role}</div>
+    <div
+      className={`cand-card${selected ? ' selected' : ''}`}
+      onClick={onClick}
+      style={{
+        background: '#fff',
+        border: selected ? '2px solid #6C5CE7' : '1px solid #E8E6F0',
+        borderRadius: 16,
+        padding: '20px',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        position: 'relative',
+        overflow: 'hidden',
+        boxShadow: selected
+          ? '0 0 0 4px rgba(108,92,231,0.12), 0 8px 32px rgba(108,92,231,0.12)'
+          : '0 1px 4px rgba(0,0,0,0.04)',
+      }}
+      onMouseEnter={e => {
+        if (!selected) {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 8px 32px rgba(108,92,231,0.1), 0 2px 8px rgba(0,0,0,0.06)';
+          e.currentTarget.style.borderColor = '#C4BFEA';
+        }
+      }}
+      onMouseLeave={e => {
+        if (!selected) {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.04)';
+          e.currentTarget.style.borderColor = '#E8E6F0';
+        }
+      }}
+    >
+      {/* Subtle gradient bar at top */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+        background: gradient, borderRadius: '16px 16px 0 0',
+      }} />
+
+      {/* Top row: Avatar + Info + Completeness badge */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginTop: 4 }}>
+        {/* Gradient Avatar */}
+        <div style={{
+          width: 46, height: 46, borderRadius: 14,
+          background: gradient,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 16, fontWeight: 800, color: '#fff',
+          flexShrink: 0,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          letterSpacing: '-0.5px',
+        }}>
+          {inits}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <StatusBadge status={candidate.status} />
-          <button
-            className="btn-icon"
-            style={{ width: 26, height: 26, padding: 0, background: '#fff', border: '1px solid #E8E6F0', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            onClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
-            title="Edit details"
-          >
-            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="#6B6B8A" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
-          </button>
+
+        {/* Name + Role */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1A1A2E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+              {candidate.name}
+            </div>
+            {/* Edit button */}
+            <button
+              onClick={e => { e.stopPropagation(); setIsEditing(true); }}
+              style={{
+                width: 22, height: 22, border: '1px solid #E8E6F0', borderRadius: 6,
+                background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s',
+              }}
+              title="Edit candidate"
+            >
+              <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="#6B6B8A" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </button>
+          </div>
+          <div style={{ fontSize: 12, color: '#6B6B8A', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {candidate.role}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+            <StatusBadge status={candidate.status} />
+            {candidate.visa && (
+              <span style={{ fontSize: 10, fontWeight: 600, background: '#F0EEFF', color: '#5B4FCC', borderRadius: 20, padding: '2px 7px', border: '1px solid #D4CFFA' }}>
+                🛂 {candidate.visa}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Profile Strength Badge */}
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0,
+          background: completenessScore >= 80 ? '#F0FDF4' : completenessScore >= 50 ? '#FFFBEB' : '#FFF1F2',
+          border: `1px solid ${completenessScore >= 80 ? '#BBF7D0' : completenessScore >= 50 ? '#FDE68A' : '#FECACA'}`,
+          borderRadius: 10, padding: '5px 8px', gap: 1,
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: completenessScore >= 80 ? '#16A34A' : completenessScore >= 50 ? '#D97706' : '#DC2626', lineHeight: 1 }}>
+            {completenessScore}%
+          </span>
+          <span style={{ fontSize: 9, fontWeight: 500, color: completenessScore >= 80 ? '#16A34A' : completenessScore >= 50 ? '#D97706' : '#DC2626', letterSpacing: '0.02em' }}>
+            Profile
+          </span>
         </div>
       </div>
 
-      {/* Meta details */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12, fontSize: 12, color: '#1A1A2E' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontWeight: 500, color: '#6B6B8A', width: 65 }}>🛂 Visa:</span>
-          <span style={{ color: candidate.visa ? '#1A1A2E' : '#EF4444', fontStyle: candidate.visa ? 'normal' : 'italic' }}>{candidate.visa || "Not Available"}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontWeight: 500, color: '#6B6B8A', width: 65 }}>📧 Email:</span>
-          <span style={{ wordBreak: 'break-all', color: candidate.email ? '#1A1A2E' : '#EF4444', fontStyle: candidate.email ? 'normal' : 'italic' }}>{candidate.email || "Not Available"}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontWeight: 500, color: '#6B6B8A', width: 65 }}>📞 Phone:</span>
-          <span style={{ color: candidate.phone ? '#1A1A2E' : '#EF4444', fontStyle: candidate.phone ? 'normal' : 'italic' }}>{candidate.phone || "Not Available"}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontWeight: 500, color: '#6B6B8A', width: 65 }}>🔗 LinkedIn:</span>
-          {candidate.linkedin ? (
-            <a href={candidate.linkedin.startsWith('http') ? candidate.linkedin : `https://${candidate.linkedin}`} target="_blank" rel="noopener noreferrer" style={{ color: '#6C5CE7', textDecoration: 'none' }} onClick={e => e.stopPropagation()}>
-              View Profile
-            </a>
-          ) : (
-            <span style={{ color: '#EF4444', fontStyle: 'italic' }}>Not Available</span>
+      {/* Skills chips */}
+      {shown.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 12 }}>
+          {shown.map((s, i) => <SkillTag key={s} label={s} index={i} />)}
+          {extra > 0 && (
+            <span style={{ fontSize: 11, color: '#6B6B8A', background: '#F7F6FB', border: '1px solid #E8E6F0', borderRadius: 20, padding: '3px 9px' }}>+{extra} more</span>
           )}
         </div>
+      )}
+
+      {/* Contact completeness row */}
+      <div style={{ display: 'flex', gap: 5, marginTop: 10, flexWrap: 'wrap' }}>
+        {candidate.email && <span style={{ fontSize: 10, fontWeight: 500, background: '#ECFDF5', color: '#059669', borderRadius: 20, padding: '2px 7px', border: '1px solid #A7F3D0' }}>✉ Email</span>}
+        {candidate.phone && <span style={{ fontSize: 10, fontWeight: 500, background: '#EFF6FF', color: '#2563EB', borderRadius: 20, padding: '2px 7px', border: '1px solid #BFDBFE' }}>📞 Phone</span>}
+        {candidate.linkedin && <span style={{ fontSize: 10, fontWeight: 500, background: '#EFF6FF', color: '#2563EB', borderRadius: 20, padding: '2px 7px', border: '1px solid #BFDBFE' }}>in LinkedIn</span>}
+        {candidate.resume_url && <span style={{ fontSize: 10, fontWeight: 500, background: '#F5F3FF', color: '#7C3AED', borderRadius: 20, padding: '2px 7px', border: '1px solid #DDD6FE' }}>📄 Resume</span>}
       </div>
 
-      {/* Skills */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 14 }}>
-        {shown.map((s, i) => <SkillTag key={s} label={s} index={i} />)}
-        {extra > 0 && <span style={{ fontSize: 11, color: '#6B6B8A', background: '#F7F6FB', border: '1px solid #E8E6F0', borderRadius: 20, padding: '3px 9px' }}>+{extra} more</span>}
-      </div>
+      {/* Location row */}
+      {candidate.location && (
+        <div style={{ fontSize: 11.5, color: '#6B6B8A', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 2C8.686 2 6 4.686 6 8c0 4.5 6 12 6 12s6-7.5 6-12c0-3.314-2.686-6-6-6zm0 8a2 2 0 110-4 2 2 0 010 4z" />
+          </svg>
+          {candidate.location}
+        </div>
+      )}
 
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-        <button className="btn-outlined sm" style={{ flex: 1 }} onClick={() => onDraftEmail(candidate)}>Draft email</button>
-        
-        <label className="btn-outlined sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, flex: 1, margin: 0, padding: '6px 8px', fontSize: 11, border: '1px solid #E8E6F0', borderRadius: 6, background: '#fff', color: '#6B6B8A' }}>
-          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      {/* Divider */}
+      <div style={{ height: 1, background: '#F0EEF8', margin: '12px 0' }} />
+
+      {/* Action row */}
+      <div style={{ display: 'flex', gap: 7, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+        <button
+          className="btn-outlined sm"
+          style={{ flex: 1, fontSize: 11.5, padding: '6px 8px', borderRadius: 8 }}
+          onClick={() => onDraftEmail(candidate)}
+        >
+          ✉ Draft Email
+        </button>
+
+        <label
+          style={{
+            flex: 1, cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+            justifyContent: 'center', gap: 4, fontSize: 11.5,
+            padding: '6px 8px', border: '1px solid #E8E6F0', borderRadius: 8,
+            background: candidate.resume_url ? '#F5F3FF' : '#fff',
+            color: candidate.resume_url ? '#7C3AED' : '#6B6B8A',
+            transition: 'all 0.15s',
+            fontWeight: 500,
+          }}
+        >
+          <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
-          <span>{isUploading ? 'Uploading...' : candidate.resume_url ? 'Update CV' : 'Upload CV'}</span>
+          {isUploading ? 'Uploading...' : candidate.resume_url ? 'Update CV' : 'Upload CV'}
           <input
             type="file"
             accept=".pdf,.doc,.docx"
@@ -1557,10 +1635,11 @@ function CandidateGridCard({ candidate, selected, onClick, onDraftEmail, onUploa
 
         <button
           className={`btn-icon${bookmarked ? ' bookmarked' : ''}`}
+          style={{ width: 32, height: 32, borderRadius: 8 }}
           onClick={e => { e.stopPropagation(); setBookmarked(b => !b); }}
           aria-label="Bookmark"
         >
-          <svg width="14" height="14" fill={bookmarked ? '#F59E0B' : 'none'} viewBox="0 0 24 24">
+          <svg width="13" height="13" fill={bookmarked ? '#F59E0B' : 'none'} viewBox="0 0 24 24">
             <path stroke={bookmarked ? '#F59E0B' : '#6B6B8A'} strokeWidth="2" strokeLinecap="round" d="M5 3h14a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z"/>
           </svg>
         </button>
@@ -1568,6 +1647,7 @@ function CandidateGridCard({ candidate, selected, onClick, onDraftEmail, onUploa
     </div>
   );
 }
+
 
 // Helper to get embeddable resume url
 function getEmbeddableResumeUrl(url) {
@@ -1821,11 +1901,11 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast, onUpdateNotes 
                         <span style={{ fontSize: 13, fontWeight: 500, color: '#6B6B8A' }}>LinkedIn:</span>
                         <span style={{ fontSize: 13.5, color: '#1A1A2E', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{candidate.linkedin}</span>
                       </div>
-                      <a 
-                        href={candidate.linkedin.startsWith('http') ? candidate.linkedin : `https://${candidate.linkedin}`} 
-                        target="_blank" 
-                        rel="noreferrer" 
-                        className="btn-outlined sm" 
+                      <a
+                        href={candidate.linkedin.startsWith('http') ? candidate.linkedin : `https://${candidate.linkedin}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-outlined sm"
                         style={{ padding: '2px 8px', fontSize: 11, textDecoration: 'none' }}
                       >
                         Open
@@ -2178,8 +2258,8 @@ export default function CandidateDatabase() {
     };
   }, []);
 
-  const [candidatesList, setCandidatesList] = useState(CANDIDATES);
-  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [candidatesList, setCandidatesList] = useState([]);
+  const [loadingCandidates, setLoadingCandidates] = useState(true);
   const [totalCandidatesCount, setTotalCandidatesCount] = useState(0);
 
   const handleUploadResume = async (candidate, file) => {
@@ -2489,7 +2569,7 @@ export default function CandidateDatabase() {
         linkedin,
         skills,
         summary,
-        resume_url: 'https://raw.githubusercontent.com/rahulpahwa03/Talent-hub-rahulpahwa/main/public/sample.docx'
+        resume_url: '' // Will be set after real upload via Supabase storage
       });
     }
 
@@ -2670,32 +2750,41 @@ export default function CandidateDatabase() {
 
       if (data) {
         const mapped = data.map((c, index) => {
-          const skillsArray = c["Skills"]
-            ? c["Skills"].split(/[|,]/).map(s => s.trim()).filter(Boolean)
+          const skillsArray = c['Skills']
+            ? c['Skills'].split(/[|,]/).map(s => s.trim()).filter(Boolean)
             : [];
+
+          // Normalize LinkedIn URL to always have https:// prefix
+          let linkedinUrl = c['LinkedIn'] || '';
+          if (linkedinUrl && !linkedinUrl.startsWith('http')) {
+            linkedinUrl = `https://${linkedinUrl}`;
+          }
 
           return {
             id: c.id || c.candidate_uuid || `db-${index}`,
-            name: c["Candidate Name"] || "Unknown Candidate",
-            role: c["Title"] || c["role"] || "Software Engineer",
-            status: c["status"] || "Available Now",
-            location: c["Current Location"] || "Remote",
-            visa: c["VISA"] || "",
-            experience: Number(c["experience"]) || 5,
-            workPref: c["work_pref"] || c["workPref"] || "Remote",
-            availableFrom: c["available_from"] || c["availableFrom"] || "Immediately",
-            email: c["Email"] || "",
-            phone: c["Contact No"] || "",
-            linkedin: c["LinkedIn"] || "",
-            resume_url: c["resume_url"] || "",
-            summary: c["summary"] || c["AI Summary"] || `${c["Candidate Name"] || "Candidate"} is an experienced professional in this field.`,
+            candidate_uuid: c.candidate_uuid || null,
+            name: c['Candidate Name'] || 'Unknown Candidate',
+            role: c['Title'] || c['role'] || 'Software Engineer',
+            status: c['status'] || 'Available Now',
+            location: c['Current Location'] || 'Remote',
+            visa: c['VISA'] || '',
+            experience: Number(c['experience']) || 5,
+            workPref: c['work_pref'] || c['workPref'] || 'Remote',
+            availableFrom: c['available_from'] || c['availableFrom'] || 'Immediately',
+            lastUpdated: c['last_updated'] ? new Date(c['last_updated']).toLocaleDateString() : 'Recently',
+            email: c['Email'] || '',
+            phone: c['Contact No'] || '',
+            linkedin: linkedinUrl,
+            resume_url: c['resume_url'] || '',
+            notes: c['notes'] || '',
+            summary: c['summary'] || c['AI Summary'] || `${c['Candidate Name'] || 'Candidate'} is an experienced professional in this field.`,
             skills: {
               All: skillsArray
             },
-            history: Array.isArray(c["history"]) ? c["history"] : [
-              { company: c["current_employer"] || "Previous Company", role: c["Title"] || "Software Engineer", dates: "N/A", desc: "Experience imported from database profile." }
+            history: Array.isArray(c['history']) ? c['history'] : [
+              { company: c['current_employer'] || 'Previous Company', role: c['Title'] || 'Software Engineer', dates: 'N/A', desc: 'Experience imported from database profile.' }
             ],
-            submissions: Array.isArray(c["submissions"]) ? c["submissions"] : []
+            submissions: Array.isArray(c['submissions']) ? c['submissions'] : []
           };
         });
         setCandidatesList(mapped);

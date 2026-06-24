@@ -453,7 +453,9 @@ export default function ResumeUpload() {
         results.push(res);
       } catch (err) {
         console.error("Failed to insert candidate:", cand.name, err);
-        errors.push(`${cand.name || "Unknown"}: ${err.message || "Database insert failed"}`);
+        const msg = err.message || "Database insert failed";
+        errors.push(`${cand.name || "Unknown"}: ${msg}`);
+        toast.error(`Failed to save ${cand.name || "candidate"}: ${msg}`, { duration: 4000 });
       }
       setSubmitProgress(i + 1);
     }
@@ -461,8 +463,16 @@ export default function ResumeUpload() {
     setSubmitResult(results);
     setSubmitErrors(errors);
     setSubmitting(false);
-    toast.success(`${results.length} profiles successfully saved!`);
+
+    if (results.length === 0 && errors.length > 0) {
+      toast.error("No profiles were saved. Please check your connection and try again.");
+      // Roll back to review step so user can retry
+      setCurrentStep(3);
+    } else if (results.length > 0) {
+      toast.success(`${results.length} profile${results.length > 1 ? 's' : ''} successfully saved!`);
+    }
   };
+
 
   // Add Manual Profile to Roster
   const handleAddManualCandidate = () => {

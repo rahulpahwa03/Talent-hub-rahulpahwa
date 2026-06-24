@@ -793,6 +793,70 @@ tbody tr:hover td { background: var(--bg-soft); }
   letter-spacing: 0.02em;
 }
 
+/* ─── Animations ──────────────────────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+/* ─── Tag / Skill Pill ────────────────────────────────── */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11.5px;
+  font-weight: 500;
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+/* ─── Badge variants ─────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-green  { background: var(--success-soft);  color: var(--success);  border: 1px solid var(--success-border); }
+.badge-blue   { background: var(--accent-soft);   color: var(--accent);   border: 1px solid var(--accent-border); }
+.badge-gray   { background: var(--bg-muted);      color: var(--text-secondary); border: 1px solid var(--border); }
+.badge-purple { background: #F5F3FF; color: #7C3AED; border: 1px solid #DDD6FE; }
+.badge-yellow { background: var(--warning-soft);  color: var(--warning);  border: 1px solid var(--warning-border); }
+
+/* ─── Avatar ─────────────────────────────────────────── */
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.5px;
+  flex-shrink: 0;
+  user-select: none;
+}
+.avatar-sm { width: 32px; height: 32px; font-size: 12px; }
+.avatar-md { width: 40px; height: 40px; font-size: 14px; }
+.avatar-lg { width: 52px; height: 52px; font-size: 18px; }
+
 /* ─── Responsive ──────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

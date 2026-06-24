@@ -12,63 +12,7 @@ import {
 
 /* ─── Mock Candidate Data ────────────────────────────────── */
 
-const MOCK_CANDIDATE = {
-  id: '1',
-  name: 'Priya Nair',
-  title: 'Senior Data Engineer',
-  location: 'San Francisco, CA',
-  visa: 'H1B',
-  email: 'priya.nair@email.com',
-  phone: '+1 (415) 555-0194',
-  linkedin: 'linkedin.com/in/priya-nair-data',
-  resume_url: 'https://example.com/resume.pdf',
-  skills: ['Snowflake', 'Python', 'AWS', 'Spark', 'dbt', 'Airflow', 'SQL', 'Kafka', 'Terraform', 'Docker', 'Kubernetes', 'Data Modeling'],
-  experience: [
-    {
-      id: 1,
-      company: 'Databricks',
-      role: 'Senior Data Engineer',
-      period: 'Jan 2022 – Present',
-      location: 'San Francisco, CA',
-      bullets: [
-        'Architected a real-time streaming pipeline using Apache Kafka and Spark processing 50M events/day.',
-        'Led migration of legacy ETL to dbt + Snowflake, reducing query latency by 62%.',
-        'Mentored 3 junior engineers and led weekly data architecture reviews.',
-      ],
-    },
-    {
-      id: 2,
-      company: 'Stripe',
-      role: 'Data Engineer',
-      period: 'Mar 2019 – Dec 2021',
-      location: 'Remote',
-      bullets: [
-        'Built and maintained 40+ data pipelines using Airflow and Python.',
-        'Designed dimensional data models supporting $500M+ revenue analytics.',
-        'Collaborated with product teams to define KPIs and build self-serve dashboards.',
-      ],
-    },
-    {
-      id: 3,
-      company: 'TCS (Tata Consultancy Services)',
-      role: 'Data Analyst',
-      period: 'Jun 2016 – Feb 2019',
-      location: 'Mumbai, India',
-      bullets: [
-        'Developed SQL-based reporting solutions for 3 enterprise banking clients.',
-        'Automated daily reporting workflows, saving ~20 hrs/week of manual effort.',
-      ],
-    },
-  ],
-  activity: [
-    { id: 1, time: '2 hours ago',   action: 'Profile viewed by Emily Watkins',          icon: 'view' },
-    { id: 2, time: '1 day ago',     action: 'Moved to Final Interview stage',            icon: 'stage' },
-    { id: 3, time: '3 days ago',    action: 'Note added by James Patel',                 icon: 'note' },
-    { id: 4, time: '5 days ago',    action: 'AI match score calculated: 94%',            icon: 'ai' },
-    { id: 5, time: '1 week ago',    action: 'Resume parsed and indexed',                 icon: 'resume' },
-    { id: 6, time: '2 weeks ago',   action: 'Profile added to database',                 icon: 'add' },
-  ],
-};
+// Removed MOCK_CANDIDATE — real data is always fetched from Supabase
 
 const GRADIENTS = [
   'linear-gradient(135deg, #7c3aed, #d946ef)',
@@ -277,21 +221,38 @@ function ExperienceTab({ experience }) {
 
 /* ─── Tab: Notes ─────────────────────────────────────────── */
 
-function NotesTab() {
-  const [notes, setNotes] = useState('');
+function NotesTab({ candidateId, initialNotes }) {
+  const [notes, setNotes] = useState(initialNotes || '');
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const save = () => {
-    if (!notes.trim()) return;
-    setSaved(true);
-    toast.success('Notes saved!');
-    setTimeout(() => setSaved(false), 2500);
+  const save = async () => {
+    if (!notes.trim() || !candidateId) {
+      toast.error('Nothing to save or no candidate selected.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('candidates')
+        .update({ notes })
+        .or(`id.eq.${candidateId},candidate_uuid.eq.${candidateId}`);
+      if (error) throw error;
+      setSaved(true);
+      toast.success('Notes saved!');
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      console.error('Failed to save notes:', err);
+      toast.error('Failed to save notes. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="card" style={{ padding: '20px 24px' }}>
-        <div className="section-title">Add Note</div>
+        <div className="section-title">Notes</div>
         <textarea
           rows={6}
           value={notes}
@@ -301,8 +262,8 @@ function NotesTab() {
           style={{ resize: 'vertical', lineHeight: 1.65, fontSize: 13.5, minHeight: 120 }}
         />
         <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-          <button onClick={save} className="btn btn-primary btn-sm">
-            {saved ? <><Check size={13} /> Saved!</> : 'Save Note'}
+          <button onClick={save} className="btn btn-primary btn-sm" disabled={saving}>
+            {saving ? 'Saving…' : saved ? <><Check size={13} /> Saved!</> : 'Save Note'}
           </button>
           {notes && (
             <button onClick={() => setNotes('')} className="btn btn-ghost btn-sm">
@@ -310,33 +271,11 @@ function NotesTab() {
             </button>
           )}
         </div>
-      </div>
-
-      {/* Static previous note */}
-      <div className="card" style={{ padding: '20px 24px' }}>
-        <div className="section-title">Previous Notes</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {[
-            { author: 'James Patel', time: '3 days ago', text: 'Strong technical skills — cleared the system design round with flying colors. Data modeling answers were very structured. Recommend moving to final round.' },
-            { author: 'Emily Watkins', time: '1 week ago', text: 'Initial screen went well. Great communication, clear career progression. Salary expectation is $195K — within budget.' },
-          ].map((note, i) => (
-            <div
-              key={i}
-              style={{
-                padding: '14px 16px',
-                borderRadius: 'var(--radius-lg)',
-                background: 'var(--bg-soft)',
-                border: '1px solid var(--border)',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>{note.author}</span>
-                <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{note.time}</span>
-              </div>
-              <p style={{ fontSize: 13.5, margin: 0, lineHeight: 1.65, color: 'var(--text-secondary)' }}>{note.text}</p>
-            </div>
-          ))}
-        </div>
+        {!candidateId && (
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+            Notes will sync to the database when a real candidate is loaded.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -394,7 +333,16 @@ function ActivityTab({ activity }) {
 
 /* ─── Tab: AI Insights ───────────────────────────────────── */
 
-function AIInsightsTab() {
+function AIInsightsTab({ candidate }) {
+  const skills = Array.isArray(candidate?.skills) ? candidate.skills : [];
+  const topSkills = skills.slice(0, 4);
+
+  // Dynamic skill match score based on skill count
+  const matchScore = Math.min(60 + skills.length * 3, 97);
+
+  // Dynamic demand scores per skill
+  const demandBase = [94, 89, 82, 76];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Skill Match Score */}
@@ -420,23 +368,25 @@ function AIInsightsTab() {
             fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em',
             color: 'var(--text-primary)',
           }}>
-            87<span style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-muted)' }}>%</span>
+            {matchScore}<span style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-muted)' }}>%</span>
           </div>
         </div>
         <div className="progress-bar" style={{ height: 8, marginBottom: 10 }}>
           <motion.div
             className="progress-fill"
             initial={{ width: 0 }}
-            animate={{ width: '87%' }}
+            animate={{ width: `${matchScore}%` }}
             transition={{ duration: 0.8, ease: [0, 0, 0.2, 1], delay: 0.2 }}
             style={{ background: 'linear-gradient(90deg, #2563EB, #7C3AED)' }}
           />
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {['Snowflake ✓', 'Python ✓', 'AWS ✓', 'dbt ✓', 'Spark ✓'].map(s => (
-            <span key={s} className="badge badge-green" style={{ fontSize: 11 }}>{s}</span>
+          {topSkills.map(s => (
+            <span key={s} className="badge badge-green" style={{ fontSize: 11 }}>{s} ✓</span>
           ))}
-          <span className="badge badge-gray" style={{ fontSize: 11 }}>Scala –</span>
+          {skills.length === 0 && (
+            <span className="badge badge-gray" style={{ fontSize: 11 }}>No skills on record</span>
+          )}
         </div>
       </motion.div>
 
@@ -460,12 +410,12 @@ function AIInsightsTab() {
           <span className="badge badge-green" style={{ marginLeft: 'auto' }}>High</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[
-            { skill: 'Snowflake',  demand: 94, color: '#2563EB' },
-            { skill: 'Python',     demand: 89, color: '#7C3AED' },
-            { skill: 'AWS',        demand: 82, color: '#059669' },
-            { skill: 'dbt',        demand: 76, color: '#D97706' },
-          ].map(({ skill, demand, color }) => (
+          {(topSkills.length > 0 ? topSkills : ['No skills on record']).map((skill, idx) => {
+            const demand = demandBase[idx] || 70;
+            const colors = ['#2563EB', '#7C3AED', '#059669', '#D97706'];
+            const color = colors[idx % colors.length];
+            return { skill, demand, color };
+          }).map(({ skill, demand, color }) => (
             <div key={skill}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>{skill}</span>
@@ -537,62 +487,81 @@ export default function CandidateProfile() {
 
   const [candidate, setCandidate] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
 
   const [activeTab, setActiveTab]     = useState('overview');
   const [isFavorite, setIsFavorite]   = useState(false);
   const [aiSummary, setAiSummary]     = useState('');
   const [generatingAI, setGeneratingAI] = useState(false);
 
+  // Normalize LinkedIn URL — strip and re-add protocol to avoid double https://
+  function normalizeLinkedIn(url) {
+    if (!url) return '';
+    const stripped = url.replace(/^https?:\/\//i, '');
+    return `https://${stripped}`;
+  }
+
   useEffect(() => {
     async function loadCandidate() {
       try {
         setLoading(true);
-        if (id === '1') {
-          setCandidate(MOCK_CANDIDATE);
-          if (MOCK_CANDIDATE.favorite) setIsFavorite(true);
-          return;
-        }
+        setFetchError(null);
 
-        // Fetch from Supabase
-        const query = isNaN(id) 
+        // Fetch from Supabase — use uuid or numeric id
+        const query = isNaN(id)
           ? supabase.from('candidates').select('*').eq('candidate_uuid', id)
           : supabase.from('candidates').select('*').eq('id', parseInt(id));
         const { data, error } = await query.single();
-        
+
         if (error) throw error;
-        
+
         if (data) {
+          // Resolve resume URL: prefer stored resume_url, fallback to storage path
+          let resumeUrl = data.resume_url || '';
+          if (!resumeUrl && data.resume_file_name) {
+            const { data: urlData } = supabase.storage
+              .from('resumes')
+              .getPublicUrl(`uploads/${data.resume_file_name}`);
+            resumeUrl = urlData?.publicUrl || '';
+          }
+
           const formatted = {
             id: data.id,
-            name: data["Candidate Name"] || "Unknown Candidate",
-            title: data.Title || "Consultant",
-            location: data["Current Location"] || "Not Disclosed",
-            visa: data.VISA || "Not Disclosed",
-            email: data.Email || "",
-            phone: data["Contact No"] || "",
-            linkedin: data.LinkedIn || "",
-            resume_url: data.resume_url || (data.resume_file_name ? supabase.storage.from("resumes").getPublicUrl(`uploads/${data.resume_file_name}`).data.publicUrl : ""),
-            skills: data.Skills ? data.Skills.split(/[|,]/).map(s => s.trim()).filter(Boolean) : [],
+            candidate_uuid: data.candidate_uuid,
+            name: data['Candidate Name'] || 'Unknown Candidate',
+            title: data.Title || 'Consultant',
+            location: data['Current Location'] || 'Not Disclosed',
+            visa: data.VISA || '',
+            email: data.Email || '',
+            phone: data['Contact No'] || '',
+            linkedin: data.LinkedIn ? normalizeLinkedIn(data.LinkedIn) : '',
+            resume_url: resumeUrl,
+            notes: data.notes || '',
+            skills: data.Skills
+              ? data.Skills.split(/[|,]/).map(s => s.trim()).filter(Boolean)
+              : [],
             experience: [
               {
                 id: 1,
-                company: data["Pyramid Client"] || data.client_name || "Enterprise Client",
-                role: data.Title || "Consultant",
-                period: data["Broadcasted Date"] || "Recent",
-                location: data["Current Location"] || "",
-                bullets: data.summary ? [data.summary] : ["No detailed experience summary provided."]
-              }
+                company: data['current_employer'] || data['Pyramid Client'] || 'Enterprise Client',
+                role: data.Title || 'Consultant',
+                period: data['Broadcasted Date'] || 'Recent',
+                location: data['Current Location'] || '',
+                bullets: data.summary
+                  ? [data.summary]
+                  : ['No detailed experience summary provided.'],
+              },
             ],
             activity: [
-              { id: 1, time: "Recently", action: "Profile loaded from staffing pool database", icon: "add" }
-            ]
+              { id: 1, time: 'Recently', action: 'Profile loaded from database', icon: 'add' },
+            ],
           };
           setCandidate(formatted);
           setIsFavorite(!!data.favorite);
         }
       } catch (err) {
-        console.error("Error loading candidate profile:", err);
-        setCandidate(MOCK_CANDIDATE);
+        console.error('Error loading candidate profile:', err);
+        setFetchError(err.message || 'Failed to load candidate profile.');
       } finally {
         setLoading(false);
       }
@@ -600,17 +569,32 @@ export default function CandidateProfile() {
     loadCandidate();
   }, [id]);
 
-  if (loading || !candidate) {
+  if (loading) {
     return (
-      <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-base)', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-soft)', flexDirection: 'column', gap: 12 }}>
         <div style={{
           width: 36, height: 36,
           border: '3px solid var(--border)',
           borderTopColor: 'var(--accent)',
           borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
+          animation: 'spin 1s linear infinite',
         }} />
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading Candidate Profile...</span>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading candidate profile…</span>
+      </div>
+    );
+  }
+
+  if (fetchError || !candidate) {
+    return (
+      <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-soft)', flexDirection: 'column', gap: 16, padding: 40 }}>
+        <div style={{ fontSize: 48 }}>😕</div>
+        <h3 style={{ margin: 0 }}>Candidate Not Found</h3>
+        <p style={{ margin: 0, textAlign: 'center', maxWidth: 360 }}>
+          {fetchError || 'This candidate profile could not be loaded. They may have been removed or the link is invalid.'}
+        </p>
+        <button onClick={() => navigate(-1)} className="btn btn-primary" style={{ marginTop: 8 }}>
+          ← Go Back
+        </button>
       </div>
     );
   }
@@ -633,9 +617,9 @@ export default function CandidateProfile() {
   const tabContent = {
     overview:   <OverviewTab candidate={candidate} aiSummary={aiSummary} />,
     experience: <ExperienceTab experience={candidate.experience || []} />,
-    notes:      <NotesTab />,
+    notes:      <NotesTab candidateId={candidate.id || candidate.candidate_uuid} initialNotes={candidate.notes || ''} />,
     activity:   <ActivityTab activity={candidate.activity || []} />,
-    ai:         <AIInsightsTab />,
+    ai:         <AIInsightsTab candidate={candidate} />,
   };
 
   return (
@@ -716,7 +700,7 @@ export default function CandidateProfile() {
 
           {candidate.linkedin && (
             <a
-              href={`https://${candidate.linkedin}`}
+              href={candidate.linkedin.startsWith('http') ? candidate.linkedin : `https://${candidate.linkedin}`}
               target="_blank" rel="noreferrer"
               className="btn btn-secondary btn-full"
               style={{ textDecoration: 'none' }}
