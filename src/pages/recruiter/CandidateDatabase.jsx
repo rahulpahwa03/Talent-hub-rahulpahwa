@@ -477,6 +477,19 @@ function now() {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function getSafeSkillsList(skills) {
+  if (Array.isArray(skills)) {
+    return skills.map(s => String(s || '').trim()).filter(Boolean);
+  }
+  if (skills && typeof skills === 'object') {
+    return Object.values(skills).flat().map(s => String(s || '').trim()).filter(Boolean);
+  }
+  if (typeof skills === 'string') {
+    return skills.split(/[|,]/).map(s => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const CANDIDATES = [
   {
@@ -750,12 +763,12 @@ function DraftEmailModal({ candidate, onClose, showToast }) {
   );
   const [body, setBody] = useState(
     candidate
-      ? `Hi ${candidate.name.split(' ')[0]},\n\nI hope this email finds you well.\n\nI came across your profile and was highly impressed by your background as a ${candidate.role} with expertise in ${Object.values(candidate.skills || {}).flat().slice(0, 4).join(', ')}.\n\nWe have an exciting opportunity that matches your skills perfectly. Let me know if you would be open to a brief 10-minute chat this week to discuss details.\n\nLooking forward to hearing from you!\n\nBest regards,\nRahul\nEzHire Recruiting Team`
+      ? `Hi ${candidate.name.split(' ')[0]},\n\nI hope this email finds you well.\n\nI came across your profile and was highly impressed by your background as a ${candidate.role} with expertise in ${getSafeSkillsList(candidate.skills).slice(0, 4).join(', ')}.\n\nWe have an exciting opportunity that matches your skills perfectly. Let me know if you would be open to a brief 10-minute chat this week to discuss details.\n\nLooking forward to hearing from you!\n\nBest regards,\nRahul\nEzHire Recruiting Team`
       : ''
   );
 
   function regenerate() {
-    setBody(`Hi ${candidate?.name.split(' ')[0] || 'there'},\n\nHope you're doing great. I'm reaching out because your experience with ${Object.values(candidate?.skills || {}).flat().slice(0, 3).join(', ')} aligns well with some of our open positions. Are you open to exploring new roles at the moment?\n\nLet's connect!\n\nBest,\nRahul`);
+    setBody(`Hi ${candidate?.name.split(' ')[0] || 'there'},\n\nHope you're doing great. I'm reaching out because your experience with ${getSafeSkillsList(candidate?.skills).slice(0, 3).join(', ')} aligns well with some of our open positions. Are you open to exploring new roles at the moment?\n\nLet's connect!\n\nBest,\nRahul`);
     showToast('Outreach email regenerated', 'info');
   }
 
@@ -988,7 +1001,7 @@ function BulkParseModal({ isOpen, onClose, onSave, showToast }) {
 // ─── INLINE CANDIDATE CARD (for Ezra chat) ────────────────────────────────────
 function InlineCandidateCard({ candidate, onViewProfile, onDraftEmail }) {
   const [bookmarked, setBookmarked] = useState(false);
-  const allSkills = Object.values(candidate.skills || {}).flat();
+  const allSkills = getSafeSkillsList(candidate.skills);
   const shown = allSkills.slice(0, 3);
   const extra = allSkills.length - shown.length;
 
@@ -1065,7 +1078,7 @@ function EzraPanel({ candidates, isOpen, onClose, onViewProfile, onDraftEmail, s
   // Build candidate context string for AI
   const candidateContext = useMemo(() => {
     return candidates.map(c => {
-      const allSkills = Object.values(c.skills || {}).flat().join(', ');
+      const allSkills = getSafeSkillsList(c.skills).join(', ');
       return `ID:${c.id} | Name:${c.name} | Role:${c.role} | Status:${c.status} | Location:${c.location} | Visa:${c.visa} | Experience:${c.experience}yrs | WorkPref:${c.workPref} | AvailableFrom:${c.availableFrom} | Skills:[${allSkills}] | Summary:${c.summary}`;
     }).join('\n');
   }, [candidates]);
@@ -1100,7 +1113,7 @@ function EzraPanel({ candidates, isOpen, onClose, onViewProfile, onDraftEmail, s
 
     // 2. Identify skills mentioned
     const skillsList = [];
-    const allUniqueSkills = Array.from(new Set(candidates.flatMap(c => Object.values(c.skills || {}).flat())));
+    const allUniqueSkills = Array.from(new Set(candidates.flatMap(c => getSafeSkillsList(c.skills))));
     for (const skill of allUniqueSkills) {
       if (text.includes(skill.toLowerCase())) {
         skillsList.push(skill);
@@ -1135,7 +1148,7 @@ function EzraPanel({ candidates, isOpen, onClose, onViewProfile, onDraftEmail, s
     let results = candidates;
     if (skillsList.length > 0) {
       results = results.filter(c => {
-        const cSkills = Object.values(c.skills || {}).flat().map(s => s.toLowerCase());
+        const cSkills = getSafeSkillsList(c.skills).map(s => s.toLowerCase());
         return skillsList.every(s => cSkills.includes(s.toLowerCase()));
       });
     }
@@ -1678,11 +1691,19 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast, onUpdateNotes 
   const [notes, setNotes] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
 
-  useEffect(() => {
-    if (candidate) {
-      setNotes(candidate.notes || '');
+  const structuredSkills = useMemo(() => {
+    const s = candidate?.skills;
+    if (Array.isArray(s)) {
+      return { 'Skills': s };
     }
-  }, [candidate]);
+    if (s && typeof s === 'object') {
+      return s;
+    }
+    if (typeof s === 'string') {
+      return { 'Skills': s.split(/[|,]/).map(x => x.trim()).filter(Boolean) };
+    }
+    return {};
+  }, [candidate?.skills]);
 
   const debouncedSave = useCallback(
     debounce(async (val, candidateId) => {
@@ -1735,7 +1756,7 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast, onUpdateNotes 
     const rateMax = Math.round(baseRate * 1.1);
     
     // Compute a mock demand and recommendation score deterministically
-    const demandScore = Math.min(65 + ((candidate.experience || 5) * 2) + (Object.values(candidate.skills || {}).flat().length * 1.5), 98);
+    const demandScore = Math.min(65 + ((candidate.experience || 5) * 2) + (getSafeSkillsList(candidate.skills).length * 1.5), 98);
     const recommendationScore = ((demandScore / 10) + 0.3).toFixed(1);
 
     return {
@@ -1922,7 +1943,7 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast, onUpdateNotes 
                   <button 
                     className="btn-outlined sm" 
                     onClick={() => {
-                      const skillsList = Object.values(candidate.skills || {}).flat();
+                      const skillsList = getSafeSkillsList(candidate.skills);
                       const body = `Hi ${candidate.name.split(' ')[0]},\n\nI hope this email finds you well.\n\nI came across your profile and was highly impressed by your background as a ${candidate.role} with expertise in ${skillsList.slice(0, 4).join(', ')}.\n\nWe have an exciting opportunity that matches your skills perfectly. Let me know if you would be open to a brief 10-minute chat this week to discuss details.\n\nLooking forward to hearing from you!\n\nBest regards,\nRahul\nEzHire Recruiting Team`;
                       navigator.clipboard.writeText(body);
                       showToast('Outreach draft copied!', 'success');
@@ -1933,7 +1954,7 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast, onUpdateNotes 
                 </div>
                 <div style={{ background: '#F7F6FB', padding: 12, borderRadius: 8, fontSize: 12.5, color: '#4A4A68', marginTop: 8, maxHeight: 110, overflowY: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>
                   {(() => {
-                    const skillsList = Object.values(candidate.skills || {}).flat();
+                    const skillsList = getSafeSkillsList(candidate.skills);
                     return `Hi ${candidate.name.split(' ')[0]},\n\nI hope this email finds you well.\n\nI came across your profile and was highly impressed by your background as a ${candidate.role} with expertise in ${skillsList.slice(0, 4).join(', ')}.\n\nWe have an exciting opportunity that matches your skills perfectly. Let me know if you would be open to a brief 10-minute chat this week to discuss details.\n\nLooking forward to hearing from you!\n\nBest regards,\nRahul\nEzHire Recruiting Team`;
                   })()}
                 </div>
@@ -1947,7 +1968,7 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast, onUpdateNotes 
                 </div>
                 <div className="summary-quote">
                   {(() => {
-                    const skillsList = Object.values(candidate.skills || {}).flat();
+                    const skillsList = getSafeSkillsList(candidate.skills);
                     const topSkills = skillsList.slice(0, 4).join(', ');
                     const firstName = candidate.name.split(' ')[0];
                     return `${candidate.name} is a highly accomplished ${candidate.role} with ${candidate.experience} years of professional experience. Currently located in ${candidate.location} and open to ${candidate.workPref} roles under ${candidate.visa} status, ${firstName} has demonstrated hands-on expertise in ${topSkills}. Strong fit for modern engineering and architectural roles requiring ${skillsList.slice(0, 3).join(', ')}.`;
@@ -1958,7 +1979,7 @@ function DetailPage({ candidate, onBack, onDraftEmail, showToast, onUpdateNotes 
               {/* Skills */}
               <div className="detail-card-sm">
                 <div className="detail-section-label">Skills & technologies</div>
-                {Object.entries(candidate.skills || {}).map(([cat, skills]) => {
+                {Object.entries(structuredSkills).map(([cat, skills]) => {
                   const col = getCategoryColor(cat);
                   return (
                     <div key={cat} style={{ marginBottom: 14 }}>
@@ -2034,7 +2055,7 @@ function CandidatesPanel({
     return candidates.filter(c => {
       const q = search.toLowerCase();
       const matchQ = !q || c.name.toLowerCase().includes(q) || c.role.toLowerCase().includes(q) ||
-        c.location.toLowerCase().includes(q) || Object.values(c.skills || {}).flat().some(s => s.toLowerCase().includes(q));
+        c.location.toLowerCase().includes(q) || getSafeSkillsList(c.skills).some(s => s.toLowerCase().includes(q));
       const matchStatus = statusFilter === 'All' || c.status === statusFilter;
       const matchVisa = visaFilter === 'All' || c.visa === visaFilter;
       const matchWork = workPref === 'All' || c.workPref === workPref;
@@ -2756,9 +2777,11 @@ export default function CandidateDatabase() {
 
       if (data) {
         const mapped = data.map((c, index) => {
-          const skillsArray = c['Skills']
-            ? c['Skills'].split(/[|,]/).map(s => s.trim()).filter(Boolean)
-            : [];
+          const skillsArray = Array.isArray(c['Skills'])
+            ? c['Skills'].map(s => String(s || '').trim()).filter(Boolean)
+            : (typeof c['Skills'] === 'string'
+                ? c['Skills'].split(/[|,]/).map(s => s.trim()).filter(Boolean)
+                : []);
 
           // Normalize LinkedIn URL to always have https:// prefix
           let linkedinUrl = c['LinkedIn'] || '';
