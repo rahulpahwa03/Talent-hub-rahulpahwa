@@ -466,7 +466,13 @@ function CandidateCard({ candidate: c, onViewProfile, onPreviewResume, onToggleF
   const avatarColor = getAvatar(c['Candidate Name']);
   const resumeUrl = (c.resume_url || c['Resume URL'] || '').trim();
   const hasResume = resumeUrl.length > 5;
-  const skillList = (c['Skills'] || c.skills || '').split(/[|,]/).map(s => s.trim()).filter(Boolean);
+  let skillList = [];
+  const rawSkills = c['Skills'] || c.skills || '';
+  if (Array.isArray(rawSkills)) {
+    skillList = rawSkills.map(s => (s || '').trim()).filter(Boolean);
+  } else if (typeof rawSkills === 'string') {
+    skillList = rawSkills.split(/[|,]/).map(s => s.trim()).filter(Boolean);
+  }
   const visaColor = getVisaColor(c['VISA'] || c.visa || '');
   const workColor = getWorkColor(c.work_preference || c.workPref || '');
   const expYears = parseInt(c.experience_years || c.experience || 0);

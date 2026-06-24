@@ -13,7 +13,9 @@ function getAIResponse(input, candidates = [], selectedCandidate = null) {
     }
     const name = selectedCandidate["Candidate Name"] || "the candidate";
     const title = selectedCandidate["Title"] || "Specialist";
-    const skills = selectedCandidate["Skills"] || "various technical skills";
+    const skillsRaw = selectedCandidate["Skills"] || selectedCandidate.skills;
+    const skillsStr = Array.isArray(skillsRaw) ? skillsRaw.join(", ") : (skillsRaw || "various technical skills");
+    const skillsFirst = Array.isArray(skillsRaw) ? (skillsRaw[0] || "their domain") : (skillsRaw ? skillsRaw.split(/[|,]/)[0] : "their domain");
     const location = selectedCandidate["Current Location"] || "unknown location";
     const visa = selectedCandidate["VISA"] || "not specified";
     const exp = selectedCandidate["experience"] || selectedCandidate["Years of Experience"] || "several years of";
@@ -21,10 +23,10 @@ function getAIResponse(input, candidates = [], selectedCandidate = null) {
     
     return `I've analyzed the profile of **${name}**. Here is my executive summary:
 - **Role**: ${title} (${exp} experience${employer ? ` at ${employer}` : ""})
-- **Tech Stack**: ${skills}
+- **Tech Stack**: ${skillsStr}
 - **Location & Visa**: 📍 ${location} · 🛂 Visa: ${visa || "Not specified"}
 
-**AI Assessment**: This candidate is highly specialized in **${skills.split(/[|,]/)[0] || "their domain"}**. They present a very strong profile for related development or engineering roles. Would you like me to draft an email outreach draft for them?`;
+**AI Assessment**: This candidate is highly specialized in **${skillsFirst || "their domain"}**. They present a very strong profile for related development or engineering roles. Would you like me to draft an email outreach draft for them?`;
   }
   
   if (q.includes("compare") || q.includes("candidates") || q.includes("top")) {
@@ -34,8 +36,10 @@ function getAIResponse(input, candidates = [], selectedCandidate = null) {
     const limit = candidates.slice(0, 3);
     let response = `I've compared the top candidates in your active view (${candidates.length} total found):\n\n`;
     limit.forEach((c, idx) => {
+      const cSkillsRaw = c["Skills"] || c.skills;
+      const cSkillsList = Array.isArray(cSkillsRaw) ? cSkillsRaw : (cSkillsRaw ? cSkillsRaw.split(/[|,]/).map(s=>s.trim()) : []);
       response += `${idx + 1}. **${c["Candidate Name"]}** (${c["Title"] || "Specialist"})\n`;
-      response += `   - *Top Stack*: ${c["Skills"] ? c["Skills"].split(/[|,]/).slice(0, 3).map(s=>s.trim()).join(', ') : "General tech"}\n`;
+      response += `   - *Top Stack*: ${cSkillsList.length > 0 ? cSkillsList.slice(0, 3).join(', ') : "General tech"}\n`;
       response += `   - *Visa & Location*: ${c["VISA"] || "—"} / ${c["Current Location"] || "—"}\n\n`;
     });
     if (candidates.length > 3) {
@@ -66,7 +70,8 @@ function getAIResponse(input, candidates = [], selectedCandidate = null) {
     }
     const name = selectedCandidate["Candidate Name"] || "there";
     const title = selectedCandidate["Title"] || "Software Specialist";
-    const skills = selectedCandidate["Skills"] ? selectedCandidate["Skills"].split(/[|,]/).map(s=>s.trim()) : [];
+    const escSkillsRaw = selectedCandidate["Skills"] || selectedCandidate.skills;
+    const skills = Array.isArray(escSkillsRaw) ? escSkillsRaw : (escSkillsRaw ? escSkillsRaw.split(/[|,]/).map(s=>s.trim()) : []);
     
     return `Here is a custom, recruiter-ready outreach message for **${selectedCandidate["Candidate Name"]}**:
 

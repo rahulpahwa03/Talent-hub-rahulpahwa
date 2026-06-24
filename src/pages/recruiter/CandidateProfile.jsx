@@ -397,7 +397,7 @@ function skillDemand(skillName, idx) {
 function AIInsightsTab({ candidate }) {
   const skills = Array.isArray(candidate?.skills) ? candidate.skills : [];
   const topSkills = skills.slice(0, 5);
-  const matchScore = Math.min(55 + skills.length * 3 + (candidate.experience || 5), 97);
+  const matchScore = Math.min(55 + skills.length * 3 + (candidate.experienceYears || 5), 97);
   const recommendedRoles = getRoleRecommendations(candidate?.title, skills);
 
   return (
@@ -594,6 +594,7 @@ export default function CandidateProfile() {
             skills: data.Skills
               ? data.Skills.split(/[|,]/).map(s => s.trim()).filter(Boolean)
               : [],
+            experienceYears: Number(data.experience) || 5,
             experience: [
               {
                 id: 1,
@@ -662,7 +663,7 @@ export default function CandidateProfile() {
     setTimeout(() => {
       const topSkills = candidate.skills.slice(0, 4).join(', ') || 'domain-specific technologies';
       const allSkills = candidate.skills.join(', ') || 'a broad technical stack';
-      const yoe = candidate.experience ? `${candidate.experience} years of` : 'extensive';
+      const yoe = candidate.experienceYears ? `${candidate.experienceYears} years of` : 'extensive';
       const location = candidate.location || 'their current location';
       const visa = candidate.visa ? `They hold ${candidate.visa} status.` : '';
       const title = candidate.title || 'professional';
