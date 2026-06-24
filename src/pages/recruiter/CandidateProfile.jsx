@@ -386,11 +386,11 @@ function getRoleRecommendations(title, skills) {
 // Helper: calculate skill demand score from skill name hash
 function skillDemand(skillName, idx) {
   const MARKET_HOT = ['snowflake','react','python','kubernetes','typescript','aws','gpt','llm','spark','airflow','terraform','nextjs','golang','rust','vector'];
-  const lower = skillName.toLowerCase();
+  const lower = String(skillName || '').toLowerCase();
   const isHot = MARKET_HOT.some(h => lower.includes(h));
   const base = isHot ? 88 : 68;
   // small deterministic variance from skill name hash
-  const hash = skillName.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const hash = String(skillName || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
   return Math.min(base + (hash % 10), 98);
 }
 
@@ -591,9 +591,11 @@ export default function CandidateProfile() {
             linkedin: data.LinkedIn ? normalizeLinkedIn(data.LinkedIn) : '',
             resume_url: resumeUrl,
             notes: data.notes || '',
-            skills: data.Skills
-              ? data.Skills.split(/[|,]/).map(s => s.trim()).filter(Boolean)
-              : [],
+            skills: Array.isArray(data.Skills)
+              ? data.Skills.map(s => String(s || '').trim()).filter(Boolean)
+              : (typeof data.Skills === 'string'
+                  ? data.Skills.split(/[|,]/).map(s => s.trim()).filter(Boolean)
+                  : []),
             experienceYears: Number(data.experience) || 5,
             experience: [
               {

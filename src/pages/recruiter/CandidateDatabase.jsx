@@ -2187,7 +2187,7 @@ function CandidatesPanel({
                     setSelectedId(c.id);
                     // Navigate directly to the full profile page on card click
                     const profileId = c.id || c.candidate_uuid;
-                    navigate(`/recruiter/profile/${profileId}`);
+                    navigate(`/recruiter/candidates/${profileId}`);
                   }}
                   onDraftEmail={onDraftEmail}
                   onUploadResume={handleUploadResume}
@@ -2827,7 +2827,7 @@ export default function CandidateDatabase() {
   function viewProfile(candidate) {
     // Navigate to standalone profile page using the Supabase numeric id (most reliable)
     const profileId = candidate.id || candidate.candidate_uuid || candidate.id;
-    navigate(`/recruiter/profile/${profileId}`);
+    navigate(`/recruiter/candidates/${profileId}`);
   }
 
   function openDraftEmail(candidate) {
